@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maintenance Requests</title>
+  <base href="/run/maintenance-requests/" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:           var(--hub-bg, #f9fafb);
+      --card:         var(--hub-surface, #ffffff);
+      --border:       var(--hub-border, #e5e7eb);
+      --text:         var(--hub-text, #111827);
+      --muted:        var(--hub-text-muted, #6b7280);
+      --accent:       var(--hub-primary, #111827);
+      --accent-fg:    var(--hub-primary-fg, #ffffff);
+      --accent-hover: var(--hub-primary-hover, #374151);
+      --radius:       var(--hub-radius, 0.5rem);
+      --shadow:       0 1px 3px rgba(0,0,0,.07);
+    }
+
+    body {
+      font-family: var(--hub-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; font-size: var(--hub-font-size, 15px); line-height: 1.5;
+    }
+    .app { max-width: 640px; margin: 0 auto; padding: 16px; }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; padding: 14px 18px;
+      background: var(--accent); border-radius: var(--radius); color: white;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 700; }
+    header .sub { font-size: 0.8rem; opacity: .75; margin-top: 1px; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 8px;
+      font-size: 0.875rem; font-weight: 600; cursor: pointer; border: none; transition: opacity .15s;
+    }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .btn-primary  { background: var(--accent); color: white; }
+    .btn-primary:hover:not(:disabled) { opacity: .88; }
+    .btn-ghost    { background: transparent; color: var(--muted); border: 1.5px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--text); color: var(--text); }
+    .btn-danger   { background: #dc2626; color: white; }
+    .btn-danger:hover:not(:disabled) { opacity: .88; }
+    .btn-icon     { background: rgba(255,255,255,.2); color: white; border: none; font-size: 1.3rem; padding: 4px 10px; border-radius: 8px; cursor: pointer; line-height: 1; }
+    .btn-icon:hover { background: rgba(255,255,255,.3); }
+    .btn-sm       { padding: 5px 12px; font-size: 0.8rem; }
+
+    .item-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+    .item-tab {
+      padding: 6px 14px; border-radius: 20px;
+      border: 1.5px solid var(--border); background: var(--card);
+      font-size: 0.88rem; font-weight: 600; cursor: pointer; color: var(--muted); transition: all .15s;
+    }
+    .item-tab.active { border-color: var(--accent); background: #f3f4f6; color: var(--accent); }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+      box-shadow: var(--shadow); margin-bottom: 10px;
+    }
+
+    .req-card {
+      background: var(--card); border: 1.5px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+      box-shadow: var(--shadow); margin-bottom: 10px;
+      cursor: pointer; transition: border-color .15s;
+    }
+    .req-card:hover { border-color: var(--accent); }
+    .req-top { display: flex; align-items: flex-start; gap: 10px; }
+    .req-icon { font-size: 1.5rem; flex-shrink: 0; line-height: 1.3; }
+    .req-title-wrap { flex: 1; min-width: 0; }
+    .req-title { font-weight: 700; font-size: 0.95rem; }
+    .req-meta  { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    .req-footer { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 3px 10px; border-radius: 12px;
+      font-size: 0.78rem; font-weight: 600; color: white; white-space: nowrap;
+    }
+    .badge-sm { padding: 2px 8px; font-size: 0.72rem; }
+    .badge-outline {
+      background: transparent !important; border: 1.5px solid var(--border);
+      color: var(--muted) !important; padding: 2px 8px;
+    }
+
+    .section-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 10px; }
+
+    .comment-row { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .comment-row:last-child { border-bottom: none; }
+    .comment-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; color: white; flex-shrink: 0; margin-top: 2px; }
+    .comment-meta { font-size: 0.78rem; color: var(--muted); margin-bottom: 3px; }
+    .comment-text { font-size: 0.88rem; line-height: 1.5; }
+
+    .status-btn {
+      padding: 6px 14px; border-radius: 8px; border: 1.5px solid var(--border);
+      background: var(--card); font-size: 0.82rem; font-weight: 600; cursor: pointer;
+      color: var(--muted); transition: all .15s;
+    }
+    .status-btn.active { color: white; border-color: transparent; }
+    .status-btn:hover:not(.active) { border-color: var(--text); color: var(--text); }
+
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; justify-content: center; z-index: 100; }
+    @media (min-width: 480px) { .modal-backdrop { align-items: center; padding: 20px; } }
+    .modal { background: white; border-radius: var(--radius) var(--radius) 0 0; width: 100%; max-width: 520px; padding: 22px; max-height: 92vh; overflow-y: auto; }
+    @media (min-width: 480px) { .modal { border-radius: var(--radius); } }
+    .modal h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+    .modal-actions .btn { flex: 1; justify-content: center; min-width: 90px; }
+
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 0.78rem; font-weight: 700; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .04em; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; border: 1.5px solid var(--border); border-radius: 8px;
+      padding: 9px 12px; font-size: 0.95rem; outline: none; transition: border-color .15s;
+      background: white; font-family: inherit; color: inherit;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); }
+    .form-group textarea { resize: vertical; min-height: 72px; }
+    .form-row { display: flex; gap: 10px; }
+    .form-row > * { flex: 1; }
+    .muted-label { font-weight: 400; text-transform: none; color: var(--muted); }
+
+    .empty    { text-align: center; padding: 36px 16px; color: var(--muted); font-size: 0.9rem; }
+    .empty-sm { font-size: 0.85rem; color: var(--muted); padding: 6px 0; }
+    .loading  { text-align: center; padding: 40px; color: var(--muted); }
+    .back-link { font-size: 0.8rem; opacity: .75; cursor: pointer; margin-bottom: 3px; display: inline-block; }
+    .back-link:hover { opacity: 1; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div id="root"><div class="loading">Loading…</div></div>
+</div>
+<script type="module">
+import { memberColor, initial, esc, isAdult, hubConfirm } from "/hub-sdk.js";
+
+const CONTEXT = window.__CONTEXT_URL ?? "";
+const DB      = window.__DB_URL      ?? "";
+const ME      = window.__CURRENT_MEMBER ?? null;
+const APP_ID  = window.__APP_ID ?? "maintenance-requests";
+
+let members  = [];
+let requests = [];
+let comments = {};
+let filter   = "open";
+let detailId = null;
+let modalEl  = null;
+
+async function db(sql, params = []) {
+  if (!DB) return { rows: [] };
+  const res = await fetch(DB, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql, params }),
+  });
+  return res.json();
+}
+
+async function loadMembers() {
+  if (!CONTEXT) {
+    members = [
+      { id: "demo-1", name: "Alex",   role: "adult" },
+      { id: "demo-2", name: "Jordan", role: "adult" },
+      { id: "demo-3", name: "Sam",    role: "child" },
+    ];
+    return;
+  }
+  try {
+    const res = await fetch(`${CONTEXT}?keys=family.members`);
+    members = ((await res.json())["family.members"]) ?? [];
+  } catch { members = []; }
+}
+
+function demoAgo(days) { return new Date(Date.now() - days * 86400000).toISOString(); }
+
+async function loadRequests() {
+  if (!DB) {
+    requests = [
+      { id: "d1", title: "Broken faucet in laundry room",   description: "The faucet drips constantly — needs a new washer.", location: "Laundry Room", category: "plumbing",    priority: "high",   status: "open",        submitted_by: "demo-1", assigned_to: null,     resolved_at: null,          created_at: demoAgo(2),  updated_at: demoAgo(2)  },
+      { id: "d2", title: "HVAC not cooling in unit 4B",     description: "Air conditioning stopped working during the heat wave.", location: "Unit 4B",    category: "hvac",        priority: "urgent", status: "in_progress", submitted_by: "demo-2", assigned_to: "demo-1", resolved_at: null,          created_at: demoAgo(5),  updated_at: demoAgo(1)  },
+      { id: "d3", title: "Parking lot entrance light out",  description: "The pole light near the main gate is out.",           location: "Parking Lot", category: "electrical",  priority: "medium", status: "resolved",    submitted_by: "demo-3", assigned_to: "demo-2", resolved_at: demoAgo(1),   created_at: demoAgo(10), updated_at: demoAgo(1)  },
+      { id: "d4", title: "Lobby door slow to close",        description: "The spring on the front door is weak — takes 10+ seconds to close.", location: "Lobby",    category: "structural",  priority: "low",    status: "open",        submitted_by: "demo-2", assigned_to: null,     resolved_at: null,          created_at: demoAgo(1),  updated_at: demoAgo(1)  },
+    ];
+    return;
+  }
+  const { rows } = await db(
+    `SELECT * FROM requests ORDER BY
+      CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+      created_at DESC`
+  );
+  requests = rows ?? [];
+}
+
+async function loadComments(requestId) {
+  if (!DB) { comments[requestId] = []; return; }
+  const { rows } = await db(
+    `SELECT * FROM comments WHERE request_id = ? ORDER BY created_at`,
+    [requestId]
+  );
+  comments[requestId] = rows ?? [];
+}
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+
+const PRIORITY_COLORS = { urgent: "#dc2626", high: "#ea580c", medium: "#ca8a04", low: "#9ca3af" };
+const STATUS_LABELS   = { open: "Open", in_progress: "In Progress", resolved: "Resolved" };
+const STATUS_COLORS   = { open: "#2563eb", in_progress: "#7c3aed", resolved: "#16a34a" };
+const CAT_LABELS = { plumbing: "Plumbing", electrical: "Electrical", hvac: "HVAC", structural: "Structural", appliance: "Appliance", grounds: "Grounds", other: "Other" };
+const CAT_ICONS  = { plumbing: "🪠", electrical: "⚡", hvac: "🌡️", structural: "🏗️", appliance: "🔌", grounds: "🌿", other: "🔧" };
+
+function memberName(id) { return members.find(m => m.id === id)?.name ?? "Unknown"; }
+function fmtDate(iso)   {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// ─── DB ops ─────────────────────────────────────────────────────────────────
+
+async function submitRequest(fields) {
+  const id  = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await db(
+    `INSERT INTO requests (id, title, description, location, category, priority, status, submitted_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
+    [id, fields.title, fields.description, fields.location, fields.category, fields.priority, ME?.id ?? "system", now, now]
+  );
+  await Promise.all([
+    notify(`New request: ${fields.title}`, `${ME?.name ?? "Someone"} submitted a ${fields.priority}-priority request.`),
+    loadRequests(),
+  ]);
+  return id;
+}
+
+async function updateStatus(requestId, status) {
+  const now        = new Date().toISOString();
+  const resolvedAt = status === "resolved" ? now : null;
+  await db(
+    `UPDATE requests SET status = ?, resolved_at = ?, updated_at = ? WHERE id = ?`,
+    [status, resolvedAt, now, requestId]
+  );
+  requests = requests.map(r =>
+    r.id === requestId ? { ...r, status, resolved_at: resolvedAt, updated_at: now } : r
+  );
+}
+
+async function assignRequest(requestId, memberId) {
+  const now = new Date().toISOString();
+  await db(
+    `UPDATE requests SET assigned_to = ?, updated_at = ? WHERE id = ?`,
+    [memberId || null, now, requestId]
+  );
+  requests = requests.map(r =>
+    r.id === requestId ? { ...r, assigned_to: memberId || null, updated_at: now } : r
+  );
+}
+
+async function addComment(requestId, body) {
+  const id  = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await db(
+    `INSERT INTO comments (id, request_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)`,
+    [id, requestId, ME?.id ?? "system", body, now]
+  );
+  if (!comments[requestId]) comments[requestId] = [];
+  comments[requestId] = [
+    ...comments[requestId],
+    { id, request_id: requestId, author_id: ME?.id ?? "system", body, created_at: now },
+  ];
+}
+
+async function deleteRequest(id) {
+  if (!await hubConfirm({ message: "Delete this request?", description: "All comments will also be removed. This cannot be undone.", confirmLabel: "Delete", destructive: true })) return false;
+  await db(`DELETE FROM requests WHERE id = ?`, [id]);
+  await db(`DELETE FROM comments WHERE request_id = ?`, [id]);
+  requests = requests.filter(r => r.id !== id);
+  delete comments[id];
+  return true;
+}
+
+async function notify(title, body) {
+  await fetch("/api/notifications/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, body, url: `/run/${APP_ID}` }),
+  }).catch(() => {});
+}
+
+// ─── Modal ──────────────────────────────────────────────────────────────────
+
+function openModal(html) {
+  closeModal();
+  modalEl = document.createElement("div");
+  modalEl.className = "modal-backdrop";
+  modalEl.innerHTML = `<div class="modal">${html}</div>`;
+  modalEl.addEventListener("click", e => { if (e.target === modalEl) closeModal(); });
+  document.body.appendChild(modalEl);
+}
+function closeModal() { modalEl?.remove(); modalEl = null; }
+
+// ─── Submit form ────────────────────────────────────────────────────────────
+
+const CATEGORIES = ["plumbing", "electrical", "hvac", "structural", "appliance", "grounds", "other"];
+const PRIORITIES  = ["low", "medium", "high", "urgent"];
+
+function openSubmitForm() {
+  openModal(`
+    <h3>🔨 Submit Maintenance Request</h3>
+    <div class="form-group">
+      <label>Title</label>
+      <input id="f-title" type="text" placeholder="Broken faucet in kitchen, Flickering hallway light…" autofocus />
+    </div>
+    <div class="form-group">
+      <label>Description <span class="muted-label">(optional)</span></label>
+      <textarea id="f-desc" rows="3" placeholder="Describe the problem in detail…"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Location <span class="muted-label">(optional)</span></label>
+      <input id="f-loc" type="text" placeholder="Unit 2A, Kitchen, Parking Lot B…" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Category</label>
+        <select id="f-cat">
+          ${CATEGORIES.map(c => `<option value="${c}">${CAT_ICONS[c]} ${CAT_LABELS[c]}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <select id="f-pri">
+          ${PRIORITIES.map(p => `<option value="${p}" ${p === "medium" ? "selected" : ""}>${p.charAt(0).toUpperCase() + p.slice(1)}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitForm()">Submit Request</button>
+    </div>`);
+}
+
+window.submitForm = async function() {
+  const title = document.getElementById("f-title").value.trim();
+  if (!title) { document.getElementById("f-title").focus(); return; }
+  const btn = modalEl?.querySelector(".modal-actions .btn-primary");
+  if (btn) { btn.disabled = true; btn.textContent = "Submitting…"; }
+  try {
+    const id = await submitRequest({
+      title,
+      description: document.getElementById("f-desc").value.trim(),
+      location:    document.getElementById("f-loc").value.trim(),
+      category:    document.getElementById("f-cat").value,
+      priority:    document.getElementById("f-pri").value,
+    });
+    closeModal();
+    detailId = id;
+    await loadComments(id);
+    render();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Submit Request"; }
+    throw e;
+  }
+};
+
+// ─── Detail view ────────────────────────────────────────────────────────────
+
+async function openDetail(id) {
+  detailId = id;
+  if (!comments[id]) await loadComments(id);
+  render();
+}
+
+function renderDetail() {
+  const req = requests.find(r => r.id === detailId);
+  if (!req) { detailId = null; renderList(); return; }
+
+  const meIsAdmin = isAdult(ME);
+  const catIcon   = CAT_ICONS[req.category]  ?? "🔧";
+  const catLabel  = CAT_LABELS[req.category] ?? req.category;
+  const priColor  = PRIORITY_COLORS[req.priority] ?? "#9ca3af";
+  const statColor = STATUS_COLORS[req.status]     ?? "#6b7280";
+  const statLabel = STATUS_LABELS[req.status]     ?? req.status;
+  const assignee  = req.assigned_to ? memberName(req.assigned_to) : null;
+
+  const commentsArr  = comments[detailId] ?? [];
+  const commentsHtml = commentsArr.length === 0
+    ? `<div class="empty-sm">No comments yet.</div>`
+    : commentsArr.map(c => {
+        const m   = members.find(x => x.id === c.author_id);
+        const col = memberColor(m?.id ?? "", members);
+        return `
+          <div class="comment-row">
+            <div class="comment-avatar" style="background:${col}">${initial(m?.name ?? "?")}</div>
+            <div style="flex:1;min-width:0">
+              <div class="comment-meta"><strong>${esc(m?.name ?? "Someone")}</strong> · ${fmtDate(c.created_at)}</div>
+              <div class="comment-text">${esc(c.body)}</div>
+            </div>
+          </div>`;
+      }).join("");
+
+  const adminControls = meIsAdmin ? `
+    <div class="card">
+      <div class="section-title">Admin Controls</div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label>Status</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${Object.entries(STATUS_LABELS).map(([s, l]) => `
+            <button class="status-btn ${req.status === s ? "active" : ""}"
+              style="${req.status === s ? `background:${STATUS_COLORS[s]}` : ""}"
+              onclick="setStatus('${s}')">${l}</button>`).join("")}
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Assigned to</label>
+        <select id="assign-sel" onchange="setAssignee(this.value)">
+          <option value="">Unassigned</option>
+          ${members.filter(m => isAdult(m)).map(m => `
+            <option value="${m.id}" ${req.assigned_to === m.id ? "selected" : ""}>${esc(m.name)}</option>`).join("")}
+        </select>
+      </div>
+    </div>` : "";
+
+  document.getElementById("root").innerHTML = `
+    <header>
+      <div>
+        <div class="back-link" onclick="backToList()">← All Requests</div>
+        <h1>${catIcon} ${esc(req.title)}</h1>
+        <div class="sub">${esc(catLabel)} · ${esc(memberName(req.submitted_by))} · ${fmtDate(req.created_at)}</div>
+      </div>
+    </header>
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <span class="badge" style="background:${priColor}">${req.priority.charAt(0).toUpperCase() + req.priority.slice(1)} Priority</span>
+      <span class="badge" style="background:${statColor}">${statLabel}</span>
+      ${assignee
+        ? `<span class="badge badge-outline">👤 ${esc(assignee)}</span>`
+        : `<span style="font-size:.8rem;color:var(--muted);font-style:italic">Unassigned</span>`}
+    </div>
+
+    ${req.description ? `
+      <div class="card">
+        <p style="font-size:.9rem;line-height:1.6;white-space:pre-wrap">${esc(req.description)}</p>
+      </div>` : ""}
+
+    ${req.location ? `
+      <div class="card" style="display:flex;gap:8px;align-items:center">
+        <span>📍</span><span style="font-size:.9rem">${esc(req.location)}</span>
+      </div>` : ""}
+
+    ${req.resolved_at ? `
+      <div class="card" style="background:#f0fdf4;border-color:#bbf7d0">
+        <span style="font-size:.88rem;color:#15803d">✓ Resolved on ${fmtDate(req.resolved_at)}</span>
+      </div>` : ""}
+
+    ${adminControls}
+
+    <div class="card">
+      <div class="section-title">Comments</div>
+      ${commentsHtml}
+      ${ME ? `
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:flex-end">
+          <textarea id="comment-input" rows="2" placeholder="Add a comment…"
+            style="flex:1;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:.88rem;font-family:inherit;resize:none;outline:none;transition:border-color .15s;background:white;color:inherit"
+            onfocus="this.style.borderColor='var(--accent)'"
+            onblur="this.style.borderColor='var(--border)'"></textarea>
+          <button class="btn btn-primary btn-sm" id="post-btn" onclick="postComment()">Post</button>
+        </div>` : ""}
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-ghost btn-sm" onclick="backToList()">← Back to List</button>
+      ${meIsAdmin ? `<button class="btn btn-danger btn-sm" onclick="doDelete('${esc(req.id)}')">Delete</button>` : ""}
+    </div>`;
+}
+
+window.backToList  = () => { detailId = null; render(); };
+window.openDetail  = openDetail;
+window.doDelete    = async id => { if (await deleteRequest(id)) { detailId = null; render(); } };
+window.setStatus   = async s  => { await updateStatus(detailId, s); render(); };
+window.setAssignee = async id => { await assignRequest(detailId, id); render(); };
+
+window.postComment = async function() {
+  const ta   = document.getElementById("comment-input");
+  const body = ta?.value.trim();
+  if (!body) { ta?.focus(); return; }
+  const btn = document.getElementById("post-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Posting…"; }
+  try {
+    await addComment(detailId, body);
+    render();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "Post"; }
+    throw e;
+  }
+};
+
+// ─── List view ──────────────────────────────────────────────────────────────
+
+function filteredRequests() {
+  if (filter === "all")         return requests;
+  if (filter === "in_progress") return requests.filter(r => r.status === "in_progress");
+  if (filter === "resolved")    return requests.filter(r => r.status === "resolved");
+  return requests.filter(r => r.status === "open");
+}
+
+function renderList() {
+  const filtered = filteredRequests();
+  const FILTERS  = ["open", "in_progress", "resolved", "all"];
+  const FL       = { open: "Open", in_progress: "In Progress", resolved: "Resolved", all: "All" };
+  const counts   = Object.fromEntries(
+    FILTERS.map(f => [f, f === "all" ? requests.length : requests.filter(r => r.status === f).length])
+  );
+
+  const tabsHtml = FILTERS.map(f => `
+    <button class="item-tab ${filter === f ? "active" : ""}" onclick="setFilter('${f}')">
+      ${FL[f]} <span style="opacity:.6;font-weight:400">${counts[f]}</span>
+    </button>`).join("");
+
+  const cardsHtml = filtered.length === 0
+    ? `<div class="empty">No ${filter !== "all" ? FL[filter].toLowerCase() + " " : ""}requests.</div>`
+    : filtered.map(req => {
+        const assignee = req.assigned_to ? memberName(req.assigned_to) : null;
+        return `
+          <div class="req-card" onclick="openDetail('${req.id}')">
+            <div class="req-top">
+              <span class="req-icon">${CAT_ICONS[req.category] ?? "🔧"}</span>
+              <div class="req-title-wrap">
+                <div class="req-title">${esc(req.title)}</div>
+                <div class="req-meta">${esc(CAT_LABELS[req.category] ?? req.category)} · ${fmtDate(req.created_at)}</div>
+              </div>
+              <span class="badge badge-sm" style="background:${PRIORITY_COLORS[req.priority]}" title="${req.priority} priority">
+                ${req.priority.slice(0, 1).toUpperCase()}
+              </span>
+            </div>
+            <div class="req-footer">
+              <span class="badge badge-sm" style="background:${STATUS_COLORS[req.status]}">${STATUS_LABELS[req.status]}</span>
+              ${assignee
+                ? `<span style="font-size:.78rem;color:var(--muted)">👤 ${esc(assignee)}</span>`
+                : `<span style="font-size:.78rem;color:var(--muted);font-style:italic">Unassigned</span>`}
+              ${req.location ? `<span style="font-size:.78rem;color:var(--muted)">📍 ${esc(req.location)}</span>` : ""}
+            </div>
+          </div>`;
+      }).join("");
+
+  document.getElementById("root").innerHTML = `
+    <header>
+      <div><h1>🔨 Maintenance Requests</h1><div class="sub">Submit and track facility repair requests</div></div>
+      ${ME ? `<button class="btn btn-icon" onclick="openSubmitForm()" title="Submit Request">＋</button>` : ""}
+    </header>
+    <div class="item-tabs">${tabsHtml}</div>
+    ${cardsHtml}`;
+}
+
+window.setFilter = f => { filter = f; renderList(); };
+
+// ─── Render / init ──────────────────────────────────────────────────────────
+
+function render() {
+  if (detailId) renderDetail();
+  else renderList();
+}
+
+function handleDeepLink() {
+  const id = new URLSearchParams(window.location.search).get("requestId");
+  if (id && requests.find(r => r.id === id)) openDetail(id);
+}
+
+window.openSubmitForm = openSubmitForm;
+window.closeModal     = closeModal;
+
+(async () => {
+  await loadMembers();
+  await loadRequests();
+  render();
+  handleDeepLink();
+})();
+</script>
+</body>
+</html>

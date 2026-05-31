@@ -1,0 +1,28 @@
+{
+  "id": "maintenance-requests",
+  "name": "Maintenance Requests",
+  "version": "1.0.0",
+  "description": "Submit and track facility maintenance requests. Members report issues; leadership triages, assigns, and resolves them.",
+  "entrypoint": "index.html",
+  "runtime": "static",
+  "category": "tools",
+  "tags": ["maintenance", "requests", "facilities", "org", "hoa"],
+  "data_access": {
+    "reads": ["family.members"],
+    "writes": []
+  },
+  "permissions": {
+    "default_audience": "everyone",
+    "requires_approval": false
+  },
+  "storage": "db",
+  "nav": {
+    "label": "Maintenance"
+  },
+  "icon": "🔨",
+  "ai_access": {
+    "allowed": true,
+    "mode": "read",
+    "db_exports": ["open_requests", "all_requests"]
+  }
+}
