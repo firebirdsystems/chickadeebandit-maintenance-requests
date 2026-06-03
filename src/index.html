@@ -147,8 +147,9 @@ const DB      = window.__DB_URL      ?? "";
 const ME      = window.__CURRENT_MEMBER ?? null;
 const APP_ID  = window.__APP_ID ?? "maintenance-requests";
 
-let members  = [];
-let requests = [];
+let members   = [];
+let memberMap = new Map();
+let requests  = [];
 let comments = {};
 let filter   = "open";
 let detailId = null;
@@ -171,12 +172,14 @@ async function loadMembers() {
       { id: "demo-2", name: "Jordan", role: "adult" },
       { id: "demo-3", name: "Sam",    role: "child" },
     ];
+    memberMap = new Map(members.map(m => [m.id, m]));
     return;
   }
   try {
     const res = await fetch(`${CONTEXT}?keys=family.members`);
     members = ((await res.json())["family.members"]) ?? [];
   } catch { members = []; }
+  memberMap = new Map(members.map(m => [m.id, m]));
 }
 
 function demoAgo(days) { return new Date(Date.now() - days * 86400000).toISOString(); }
@@ -216,7 +219,7 @@ const STATUS_COLORS   = { open: "#2563eb", in_progress: "#7c3aed", resolved: "#1
 const CAT_LABELS = { plumbing: "Plumbing", electrical: "Electrical", hvac: "HVAC", structural: "Structural", appliance: "Appliance", grounds: "Grounds", other: "Other" };
 const CAT_ICONS  = { plumbing: "🪠", electrical: "⚡", hvac: "🌡️", structural: "🏗️", appliance: "🔌", grounds: "🌿", other: "🔧" };
 
-function memberName(id) { return members.find(m => m.id === id)?.name ?? "Unknown"; }
+function memberName(id) { return memberMap.get(id)?.name ?? "Unknown"; }
 function fmtDate(iso)   {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -232,10 +235,13 @@ async function submitRequest(fields) {
      VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
     [id, fields.title, fields.description, fields.location, fields.category, fields.priority, ME?.id ?? "system", now, now]
   );
-  await Promise.all([
-    notify(`New request: ${fields.title}`, `${ME?.name ?? "Someone"} submitted a ${fields.priority}-priority request.`),
-    loadRequests(),
-  ]);
+  requests = [{
+    id, title: fields.title, description: fields.description, location: fields.location,
+    category: fields.category, priority: fields.priority, status: "open",
+    submitted_by: ME?.id ?? "system", assigned_to: null, resolved_at: null, created_at: now, updated_at: now,
+  }, ...requests];
+  comments[id] = [];
+  notify(`New request: ${fields.title}`, `${ME?.name ?? "Someone"} submitted a ${fields.priority}-priority request.`).catch(() => {});
   return id;
 }
 
@@ -278,8 +284,10 @@ async function addComment(requestId, body) {
 
 async function deleteRequest(id) {
   if (!await hubConfirm({ message: "Delete this request?", description: "All comments will also be removed. This cannot be undone.", confirmLabel: "Delete", destructive: true })) return false;
-  await db(`DELETE FROM requests WHERE id = ?`, [id]);
-  await db(`DELETE FROM comments WHERE request_id = ?`, [id]);
+  await Promise.all([
+    db(`DELETE FROM requests WHERE id = ?`, [id]),
+    db(`DELETE FROM comments WHERE request_id = ?`, [id]),
+  ]);
   requests = requests.filter(r => r.id !== id);
   delete comments[id];
   return true;
@@ -360,7 +368,6 @@ window.submitForm = async function() {
     });
     closeModal();
     detailId = id;
-    await loadComments(id);
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Submit Request"; }
@@ -392,7 +399,7 @@ function renderDetail() {
   const commentsHtml = commentsArr.length === 0
     ? `<div class="empty-sm">No comments yet.</div>`
     : commentsArr.map(c => {
-        const m   = members.find(x => x.id === c.author_id);
+        const m   = memberMap.get(c.author_id);
         const col = memberColor(m?.id ?? "", members);
         return `
           <div class="comment-row">
@@ -575,8 +582,7 @@ window.openSubmitForm = openSubmitForm;
 window.closeModal     = closeModal;
 
 (async () => {
-  await loadMembers();
-  await loadRequests();
+  await Promise.all([loadMembers(), loadRequests()]);
   render();
   handleDeepLink();
 })();
