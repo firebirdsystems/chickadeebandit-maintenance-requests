@@ -1,5 +1,4 @@
-CREATE TABLE IF NOT EXISTS requests (
-  household_id UUID NOT NULL DEFAULT current_setting('app.household_id', true)::uuid,
+CREATE TABLE IF NOT EXISTS app_maintenance_requests__requests (
   id           TEXT NOT NULL,
   title        TEXT NOT NULL,
   description  TEXT NOT NULL DEFAULT '',
@@ -12,24 +11,23 @@ CREATE TABLE IF NOT EXISTS requests (
   resolved_at  TEXT,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL,
-  PRIMARY KEY (household_id, id)
+  PRIMARY KEY (id)
 );
 
-CREATE TABLE IF NOT EXISTS comments (
-  household_id UUID NOT NULL DEFAULT current_setting('app.household_id', true)::uuid,
+CREATE TABLE IF NOT EXISTS app_maintenance_requests__comments (
   id           TEXT NOT NULL,
   request_id   TEXT NOT NULL,
   author_id    TEXT NOT NULL,
   body         TEXT NOT NULL,
   created_at   TEXT NOT NULL,
-  PRIMARY KEY (household_id, id)
+  PRIMARY KEY (id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_mr_requests_status
-  ON requests (household_id, status);
+  ON app_maintenance_requests__requests (status);
 
 CREATE INDEX IF NOT EXISTS idx_mr_requests_priority
-  ON requests (household_id, priority);
+  ON app_maintenance_requests__requests (priority);
 
 CREATE INDEX IF NOT EXISTS idx_mr_comments_request
-  ON comments (household_id, request_id)
+  ON app_maintenance_requests__comments (request_id);

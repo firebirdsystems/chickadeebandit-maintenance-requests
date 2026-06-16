@@ -195,7 +195,7 @@ async function loadRequests() {
     return;
   }
   const { rows } = await db(
-    `SELECT * FROM requests ORDER BY
+    `SELECT * FROM app_maintenance_requests__requests ORDER BY
       CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
       created_at DESC`
   );
@@ -205,7 +205,7 @@ async function loadRequests() {
 async function loadComments(requestId) {
   if (!DB) { comments[requestId] = []; return; }
   const { rows } = await db(
-    `SELECT * FROM comments WHERE request_id = ? ORDER BY created_at`,
+    `SELECT * FROM app_maintenance_requests__comments WHERE request_id = ? ORDER BY created_at`,
     [requestId]
   );
   comments[requestId] = rows ?? [];
@@ -231,7 +231,7 @@ async function submitRequest(fields) {
   const id  = crypto.randomUUID();
   const now = new Date().toISOString();
   await db(
-    `INSERT INTO requests (id, title, description, location, category, priority, status, submitted_by, created_at, updated_at)
+    `INSERT INTO app_maintenance_requests__requests (id, title, description, location, category, priority, status, submitted_by, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
     [id, fields.title, fields.description, fields.location, fields.category, fields.priority, ME?.id ?? "system", now, now]
   );
@@ -249,7 +249,7 @@ async function updateStatus(requestId, status) {
   const now        = new Date().toISOString();
   const resolvedAt = status === "resolved" ? now : null;
   await db(
-    `UPDATE requests SET status = ?, resolved_at = ?, updated_at = ? WHERE id = ?`,
+    `UPDATE app_maintenance_requests__requests SET status = ?, resolved_at = ?, updated_at = ? WHERE id = ?`,
     [status, resolvedAt, now, requestId]
   );
   requests = requests.map(r =>
@@ -260,7 +260,7 @@ async function updateStatus(requestId, status) {
 async function assignRequest(requestId, memberId) {
   const now = new Date().toISOString();
   await db(
-    `UPDATE requests SET assigned_to = ?, updated_at = ? WHERE id = ?`,
+    `UPDATE app_maintenance_requests__requests SET assigned_to = ?, updated_at = ? WHERE id = ?`,
     [memberId || null, now, requestId]
   );
   requests = requests.map(r =>
@@ -272,7 +272,7 @@ async function addComment(requestId, body) {
   const id  = crypto.randomUUID();
   const now = new Date().toISOString();
   await db(
-    `INSERT INTO comments (id, request_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO app_maintenance_requests__comments (id, request_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)`,
     [id, requestId, ME?.id ?? "system", body, now]
   );
   if (!comments[requestId]) comments[requestId] = [];
@@ -285,8 +285,8 @@ async function addComment(requestId, body) {
 async function deleteRequest(id) {
   if (!await hubConfirm({ message: "Delete this request?", description: "All comments will also be removed. This cannot be undone.", confirmLabel: "Delete", destructive: true })) return false;
   await Promise.all([
-    db(`DELETE FROM requests WHERE id = ?`, [id]),
-    db(`DELETE FROM comments WHERE request_id = ?`, [id]),
+    db(`DELETE FROM app_maintenance_requests__requests WHERE id = ?`, [id]),
+    db(`DELETE FROM app_maintenance_requests__comments WHERE request_id = ?`, [id]),
   ]);
   requests = requests.filter(r => r.id !== id);
   delete comments[id];

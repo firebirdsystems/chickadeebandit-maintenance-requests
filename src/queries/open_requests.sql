@@ -8,9 +8,8 @@ SELECT
   r.submitted_by,
   r.assigned_to,
   r.created_at
-FROM requests r
-WHERE r.household_id = current_setting('app.household_id', true)::uuid
-  AND r.status IN ('open', 'in_progress')
+FROM app_maintenance_requests__requests r
+WHERE r.status IN ('open', 'in_progress')
 ORDER BY
   CASE r.priority
     WHEN 'urgent' THEN 0
