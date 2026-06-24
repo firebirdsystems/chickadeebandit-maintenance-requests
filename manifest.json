@@ -16,6 +16,20 @@
     "requires_approval": false
   },
   "storage": "db",
+  "row_policies": {
+    "requests": {
+      "kind": "owner_only",
+      "member_column": "submitted_by",
+      "adults_bypass": true,
+      "member_can_update": false
+    },
+    "comments": {
+      "kind": "owner_only",
+      "member_column": "author_id",
+      "adults_bypass": true,
+      "member_can_update": false
+    }
+  },
   "nav": {
     "label": "Maintenance"
   },
