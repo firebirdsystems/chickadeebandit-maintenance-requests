@@ -310,6 +310,9 @@ function openModal(html) {
   modalEl.innerHTML = `<div class="modal">${html}</div>`;
   modalEl.addEventListener("click", e => { if (e.target === modalEl) closeModal(); });
   document.body.appendChild(modalEl);
+  // Programmatic focus works inside cross-origin iframes (unlike the autofocus
+  // attribute, which the browser blocks) because it rides the user's click gesture.
+  modalEl.querySelector("[data-autofocus]")?.focus();
 }
 function closeModal() { modalEl?.remove(); modalEl = null; }
 
@@ -323,7 +326,7 @@ function openSubmitForm() {
     <h3>🔨 Submit Maintenance Request</h3>
     <div class="form-group">
       <label>Title</label>
-      <input id="f-title" type="text" placeholder="Broken faucet in kitchen, Flickering hallway light…" autofocus />
+      <input id="f-title" type="text" placeholder="Broken faucet in kitchen, Flickering hallway light…" data-autofocus />
     </div>
     <div class="form-group">
       <label>Description <span class="muted-label">(optional)</span></label>
