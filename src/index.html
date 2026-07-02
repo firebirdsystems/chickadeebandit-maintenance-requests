@@ -146,6 +146,7 @@ const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB      = window.__DB_URL      ?? "";
 const ME      = window.__CURRENT_MEMBER ?? null;
 const APP_ID  = window.__APP_ID ?? "maintenance-requests";
+const APPEND_RECORD = window.__APPEND_RECORD_URL ?? `/run/${APP_ID}/api/append-record`;
 
 let members   = [];
 let memberMap = new Map();
@@ -163,6 +164,17 @@ async function db(sql, params = []) {
     body: JSON.stringify({ sql, params }),
   });
   return res.json();
+}
+
+async function appendRecord(name, data) {
+  const res = await fetch(`${APPEND_RECORD}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.error) throw new Error(json.error || "Append failed");
+  return json;
 }
 
 async function loadMembers() {
@@ -269,25 +281,18 @@ async function assignRequest(requestId, memberId) {
 }
 
 async function addComment(requestId, body) {
-  const id  = crypto.randomUUID();
   const now = new Date().toISOString();
-  await db(
-    `INSERT INTO app_maintenance_requests__comments (id, request_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)`,
-    [id, requestId, ME?.id ?? "system", body, now]
-  );
+  const result = await appendRecord("comments", { request_id: requestId, body });
   if (!comments[requestId]) comments[requestId] = [];
   comments[requestId] = [
     ...comments[requestId],
-    { id, request_id: requestId, author_id: ME?.id ?? "system", body, created_at: now },
+    { id: result.id, request_id: requestId, author_id: ME?.id ?? "system", body, created_at: result.created_at ?? now },
   ];
 }
 
 async function deleteRequest(id) {
   if (!await hubConfirm({ message: "Delete this request?", description: "All comments will also be removed. This cannot be undone.", confirmLabel: "Delete", destructive: true })) return false;
-  await Promise.all([
-    db(`DELETE FROM app_maintenance_requests__requests WHERE id = ?`, [id]),
-    db(`DELETE FROM app_maintenance_requests__comments WHERE request_id = ?`, [id]),
-  ]);
+  await db(`DELETE FROM app_maintenance_requests__requests WHERE id = ?`, [id]);
   requests = requests.filter(r => r.id !== id);
   delete comments[id];
   return true;
