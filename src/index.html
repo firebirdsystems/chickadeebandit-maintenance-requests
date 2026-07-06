@@ -451,7 +451,7 @@ function renderDetail() {
     </header>
 
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-      <span class="badge" style="background:${priColor}">${req.priority.charAt(0).toUpperCase() + req.priority.slice(1)} Priority</span>
+      <span class="badge" style="background:${priColor}">${esc(req.priority.charAt(0).toUpperCase() + req.priority.slice(1))} Priority</span>
       <span class="badge" style="background:${statColor}">${statLabel}</span>
       ${assignee
         ? `<span class="badge badge-outline">👤 ${esc(assignee)}</span>`
@@ -490,7 +490,7 @@ function renderDetail() {
 
     <div style="display:flex;gap:8px;margin-top:4px">
       <button class="btn btn-ghost btn-sm" onclick="backToList()">← Back to List</button>
-      ${meIsAdmin ? `<button class="btn btn-danger btn-sm" onclick="doDelete('${esc(req.id)}')">Delete</button>` : ""}
+      ${meIsAdmin ? `<button class="btn btn-danger btn-sm" data-action="delete-req" data-req-id="${esc(req.id)}">Delete</button>` : ""}
     </div>`;
 }
 
@@ -542,15 +542,15 @@ function renderList() {
     : filtered.map(req => {
         const assignee = req.assigned_to ? memberName(req.assigned_to) : null;
         return `
-          <div class="req-card" onclick="openDetail('${req.id}')">
+          <div class="req-card" data-action="open-req" data-req-id="${esc(req.id)}">
             <div class="req-top">
               <span class="req-icon">${CAT_ICONS[req.category] ?? "🔧"}</span>
               <div class="req-title-wrap">
                 <div class="req-title">${esc(req.title)}</div>
                 <div class="req-meta">${esc(CAT_LABELS[req.category] ?? req.category)} · ${fmtDate(req.created_at)}</div>
               </div>
-              <span class="badge badge-sm" style="background:${PRIORITY_COLORS[req.priority]}" title="${req.priority} priority">
-                ${req.priority.slice(0, 1).toUpperCase()}
+              <span class="badge badge-sm" style="background:${PRIORITY_COLORS[req.priority] ?? "#9ca3af"}" title="${esc(req.priority)} priority">
+                ${esc(req.priority.slice(0, 1).toUpperCase())}
               </span>
             </div>
             <div class="req-footer">
@@ -588,6 +588,18 @@ function handleDeepLink() {
 
 window.openSubmitForm = openSubmitForm;
 window.closeModal     = closeModal;
+
+// Delegated handler for row actions. #root persists across innerHTML re-renders,
+// so binding once is enough. Request ids come from the DB (attacker-controllable
+// via raw /api/db), so they must never be interpolated into inline handlers —
+// carry them on data-* attributes instead.
+document.getElementById("root").addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action][data-req-id]");
+  if (!el) return;
+  const id = el.dataset.reqId;
+  if (el.dataset.action === "open-req") openDetail(id);
+  else if (el.dataset.action === "delete-req") window.doDelete(id);
+});
 
 (async () => {
   await Promise.all([loadMembers(), loadRequests()]);
