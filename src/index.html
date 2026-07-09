@@ -141,6 +141,11 @@
 </div>
 <script type="module">
 import { memberColor, initial, esc, isAdult, hubConfirm } from "/hub-sdk.js";
+import {
+  CATEGORIES, PRIORITIES, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS, CAT_LABELS, CAT_ICONS,
+  fmtDate, memberName as memberNameOf, filterRequests,
+  priorityColor, statusColor, statusLabel,
+} from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB      = window.__DB_URL      ?? "";
@@ -225,17 +230,7 @@ async function loadComments(requestId) {
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-const PRIORITY_COLORS = { urgent: "#dc2626", high: "#ea580c", medium: "#ca8a04", low: "#9ca3af" };
-const STATUS_LABELS   = { open: "Open", in_progress: "In Progress", resolved: "Resolved" };
-const STATUS_COLORS   = { open: "#2563eb", in_progress: "#7c3aed", resolved: "#16a34a" };
-const CAT_LABELS = { plumbing: "Plumbing", electrical: "Electrical", hvac: "HVAC", structural: "Structural", appliance: "Appliance", grounds: "Grounds", other: "Other" };
-const CAT_ICONS  = { plumbing: "🪠", electrical: "⚡", hvac: "🌡️", structural: "🏗️", appliance: "🔌", grounds: "🌿", other: "🔧" };
-
-function memberName(id) { return memberMap.get(id)?.name ?? "Unknown"; }
-function fmtDate(iso)   {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
+function memberName(id) { return memberNameOf(memberMap, id); }
 
 // ─── DB ops ─────────────────────────────────────────────────────────────────
 
@@ -323,8 +318,6 @@ function closeModal() { modalEl?.remove(); modalEl = null; }
 
 // ─── Submit form ────────────────────────────────────────────────────────────
 
-const CATEGORIES = ["plumbing", "electrical", "hvac", "structural", "appliance", "grounds", "other"];
-const PRIORITIES  = ["low", "medium", "high", "urgent"];
 
 function openSubmitForm() {
   openModal(`
@@ -398,9 +391,9 @@ function renderDetail() {
   const meIsAdmin = isAdult(ME);
   const catIcon   = CAT_ICONS[req.category]  ?? "🔧";
   const catLabel  = CAT_LABELS[req.category] ?? req.category;
-  const priColor  = PRIORITY_COLORS[req.priority] ?? "#9ca3af";
-  const statColor = STATUS_COLORS[req.status]     ?? "#6b7280";
-  const statLabel = STATUS_LABELS[req.status]     ?? req.status;
+  const priColor  = priorityColor(req.priority);
+  const statColor = statusColor(req.status);
+  const statLabel = statusLabel(req.status);
   const assignee  = req.assigned_to ? memberName(req.assigned_to) : null;
 
   const commentsArr  = comments[detailId] ?? [];
@@ -517,12 +510,7 @@ window.postComment = async function() {
 
 // ─── List view ──────────────────────────────────────────────────────────────
 
-function filteredRequests() {
-  if (filter === "all")         return requests;
-  if (filter === "in_progress") return requests.filter(r => r.status === "in_progress");
-  if (filter === "resolved")    return requests.filter(r => r.status === "resolved");
-  return requests.filter(r => r.status === "open");
-}
+function filteredRequests() { return filterRequests(requests, filter); }
 
 function renderList() {
   const filtered = filteredRequests();
