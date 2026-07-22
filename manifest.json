@@ -1,5 +1,6 @@
 {
   "id": "maintenance-requests",
+  "contexts": ["household", "shared_space"],
   "name": "Maintenance Requests",
   "version": "1.0.0",
   "description": "Submit and track facility maintenance requests. Members report issues; leadership triages, assigns, and resolves them.",
