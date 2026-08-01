@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   CATEGORIES, PRIORITIES, STATUS_LABELS,
-  fmtDate, memberName, filterRequests, priorityColor, statusColor, statusLabel,
+  fmtDate, memberName, filterRequests, priorityColor, statusColor, statusLabel, searchableFields,
 } from "../src/logic.js";
 
 describe("constants", () => {
@@ -53,5 +53,16 @@ describe("color/label accessors", () => {
     expect(statusLabel("in_progress")).toBe("In Progress");
     expect(statusLabel("custom")).toBe("custom");
     expect(STATUS_LABELS.resolved).toBe("Resolved");
+  });
+});
+
+describe("searchableFields", () => {
+  it("matches on location and description, not just the title", () => {
+    const fields = searchableFields({
+      title: "Leak", description: "water pooling under the radiator",
+      location: "east stairwell", category: "plumbing", priority: "high",
+    });
+    expect(fields).toContain("east stairwell");
+    expect(fields).toContain("water pooling under the radiator");
   });
 });

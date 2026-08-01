@@ -133,6 +133,13 @@
     .loading  { text-align: center; padding: 40px; color: var(--muted); }
     .back-link { font-size: 0.8rem; opacity: .75; cursor: pointer; margin-bottom: 3px; display: inline-block; }
     .back-link:hover { opacity: 1; }
+    .search-row { margin-bottom: 12px; }
+    .search-input {
+      width: 100%; border: 1.5px solid var(--border-mid, var(--border, #d1d5db));
+      border-radius: 8px; padding: 9px 11px; font: inherit;
+      background: var(--surface, var(--card, #fff)); color: var(--text, inherit);
+    }
+    .search-input:focus { outline: none; border-color: var(--accent, #6366f1); }
   </style>
 </head>
 <body>
@@ -140,11 +147,11 @@
   <div id="root"><div class="loading">Loading…</div></div>
 </div>
 <script type="module">
-import { memberColor, initial, esc, isAdult, hubConfirm, createDbHelper } from "/hub-sdk.js";
+import { memberColor, initial, esc, isAdult, hubConfirm, createDbHelper, searchMatch } from "/hub-sdk.js";
 import {
   CATEGORIES, PRIORITIES, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS, CAT_LABELS, CAT_ICONS,
   fmtDate, memberName as memberNameOf, filterRequests,
-  priorityColor, statusColor, statusLabel,
+  priorityColor, statusColor, statusLabel, searchableFields,
 } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -158,6 +165,7 @@ let memberMap = new Map();
 let requests  = [];
 let comments = {};
 let filter   = "open";
+let searchQ = "";       // in-app search (see logic.js searchableFields)
 let detailId = null;
 let modalEl  = null;
 
@@ -537,7 +545,8 @@ window.postComment = async function() {
 function filteredRequests() { return filterRequests(requests, filter); }
 
 function renderList() {
-  const filtered = filteredRequests();
+  const scoped = filteredRequests();
+  const filtered = searchQ ? scoped.filter(r => searchMatch(searchQ, searchableFields(r))) : scoped;
   const FILTERS  = ["open", "in_progress", "resolved", "all"];
   const FL       = { open: "Open", in_progress: "In Progress", resolved: "Resolved", all: "All" };
   const counts   = Object.fromEntries(
@@ -550,7 +559,9 @@ function renderList() {
     </button>`).join("");
 
   const cardsHtml = filtered.length === 0
-    ? `<div class="empty">No ${filter !== "all" ? FL[filter].toLowerCase() + " " : ""}requests.</div>`
+    ? (searchQ
+      ? `<div class="empty">No requests match "${esc(searchQ)}".</div>`
+      : `<div class="empty">No ${filter !== "all" ? FL[filter].toLowerCase() + " " : ""}requests.</div>`)
     : filtered.map(req => {
         const assignee = req.assigned_to ? memberName(req.assigned_to) : null;
         return `
@@ -581,8 +592,22 @@ function renderList() {
       ${ME ? `<button class="btn btn-icon" onclick="openSubmitForm()" title="Submit Request">＋</button>` : ""}
     </header>
     <div class="item-tabs">${tabsHtml}</div>
-    ${cardsHtml}`;
+    ${requests.length ? `<div class="search-row"><input id="search" class="search-input" type="search" placeholder="Search requests…" aria-label="Search requests" value="${esc(searchQ)}" /></div>` : ""}
+    <div id="request-list">${cardsHtml}</div>`;
+
+  // renderList redraws the whole view, so put the caret back after a keystroke.
+  const searchEl = document.getElementById("search");
+  if (searchQ && searchEl) {
+    searchEl.focus();
+    searchEl.setSelectionRange(searchQ.length, searchQ.length);
+  }
 }
+
+document.addEventListener("input", (e) => {
+  if (e.target.id !== "search") return;
+  searchQ = e.target.value;
+  renderList();
+});
 
 window.setFilter = f => { filter = f; renderList(); };
 

@@ -37,3 +37,13 @@ export function statusColor(status) {
 export function statusLabel(status) {
   return STATUS_LABELS[status] ?? status;
 }
+
+/**
+ * Fields the in-app search matches against (see hub-sdk `searchMatch`).
+ * Location and description count as well as the title — a request is
+ * looked up as "the leak in the east stairwell", which is the location
+ * plus the body, not the one-line title.
+ */
+export function searchableFields(item) {
+  return [item.title, item.description, item.location, item.category, item.priority];
+}
