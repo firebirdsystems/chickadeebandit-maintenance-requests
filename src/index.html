@@ -140,7 +140,7 @@
   <div id="root"><div class="loading">Loading…</div></div>
 </div>
 <script type="module">
-import { memberColor, initial, esc, isAdult, hubConfirm } from "/hub-sdk.js";
+import { memberColor, initial, esc, isAdult, hubConfirm, createDbHelper } from "/hub-sdk.js";
 import {
   CATEGORIES, PRIORITIES, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS, CAT_LABELS, CAT_ICONS,
   fmtDate, memberName as memberNameOf, filterRequests,
@@ -161,15 +161,10 @@ let filter   = "open";
 let detailId = null;
 let modalEl  = null;
 
-async function db(sql, params = []) {
-  if (!DB) return { rows: [] };
-  const res = await fetch(DB, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sql, params }),
-  });
-  return res.json();
-}
+// The SDK helper THROWS on a `{ error }` body. The hand-rolled version this
+// replaced returned it, so a write refused by a row policy resolved normally:
+// the UI rendered success and every `.catch()` rollback below was dead code.
+const db = createDbHelper(DB);
 
 async function appendRecord(name, data) {
   const res = await fetch(`${APPEND_RECORD}/${encodeURIComponent(name)}`, {
@@ -297,6 +292,31 @@ async function deleteRequest(id) {
   return true;
 }
 
+/**
+ * Minimal error surface. The app never had one because it never saw an error:
+ * its hand-rolled db() returned the hub's `{ error }` body instead of throwing,
+ * so a write refused by a row policy resolved normally and the UI reported
+ * success. Now that db() throws, every handler routes here.
+ */
+let errorTimer = null;
+function showError(err) {
+  const message = err?.message || "Something went wrong. Please try again.";
+  let el = document.getElementById("app-error");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "app-error";
+    el.setAttribute("role", "alert");
+    el.style.cssText = "position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;"
+      + "max-width:min(90vw,520px);padding:10px 14px;border-radius:10px;font-size:0.9rem;"
+      + "background:var(--danger,#b42318);color:#fff;box-shadow:0 6px 24px rgba(0,0,0,.25)";
+    document.body.appendChild(el);
+  }
+  el.textContent = message;
+  el.style.display = "";
+  clearTimeout(errorTimer);
+  errorTimer = setTimeout(() => { el.style.display = "none"; }, 6000);
+}
+
 async function notify(title, body) {
   await fetch(window.__NOTIFY_URL ?? "/api/notifications/send", {
     method: "POST",
@@ -376,7 +396,7 @@ window.submitForm = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Submit Request"; }
-    throw e;
+    showError(e);
   }
 };
 
@@ -493,9 +513,9 @@ function renderDetail() {
 
 window.backToList  = () => { detailId = null; render(); };
 window.openDetail  = openDetail;
-window.doDelete    = async id => { if (await deleteRequest(id)) { detailId = null; render(); } };
-window.setStatus   = async s  => { await updateStatus(detailId, s); render(); };
-window.setAssignee = async id => { await assignRequest(detailId, id); render(); };
+window.doDelete    = async id => { try { if (await deleteRequest(id)) { detailId = null; render(); } } catch (e) { showError(e); } };
+window.setStatus   = async s  => { try { await updateStatus(detailId, s); render(); } catch (e) { showError(e); } };
+window.setAssignee = async id => { try { await assignRequest(detailId, id); render(); } catch (e) { showError(e); } };
 
 window.postComment = async function() {
   const ta   = document.getElementById("comment-input");
@@ -508,7 +528,7 @@ window.postComment = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Post"; }
-    throw e;
+    showError(e);
   }
 };
 
