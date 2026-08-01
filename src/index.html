@@ -286,6 +286,10 @@ async function addComment(requestId, body) {
 }
 
 async function deleteRequest(id) {
+  // `comments` is endpoint_writes_only, so this app cannot delete them itself —
+  // the manifest's delete_cascades declaration is what removes them: the hub
+  // deletes declared children inside the parent DELETE's transactional batch.
+  // This dialog's promise is only true because of that declaration.
   if (!await hubConfirm({ message: "Delete this request?", description: "All comments will also be removed. This cannot be undone.", confirmLabel: "Delete", destructive: true })) return false;
   await db(`DELETE FROM app_maintenance_requests__requests WHERE id = ?`, [id]);
   requests = requests.filter(r => r.id !== id);

@@ -17,6 +17,7 @@
     "requires_approval": false
   },
   "storage": "db",
+  "db_plaintext_columns": ["assigned_to"],
   "row_policies": {
     "requests": {
       "kind": "owner_only",
@@ -48,6 +49,19 @@
       }
     }
   },
+  "member_references": {
+    "requests": [
+      { "column": "submitted_by", "on_removed": "keep" },
+      { "column": "assigned_to", "on_removed": "null" }
+    ],
+    "comments": { "column": "author_id", "on_removed": "keep" }
+  },
+  "delete_cascades": {
+    "requests": [
+      { "table": "comments", "foreign_key": "request_id" }
+    ]
+  },
+  "resource_limits": { "max_db_bytes": 52428800 },
   "nav": {
     "label": "Maintenance"
   },
