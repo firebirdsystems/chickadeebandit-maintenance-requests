@@ -157,6 +157,22 @@ import {
 const CONTEXT = window.__CONTEXT_URL ?? "";
 const DB      = window.__DB_URL      ?? "";
 const ME      = window.__CURRENT_MEMBER ?? null;
+
+const EVENTS = window.__EVENTS_URL ?? "";
+
+async function publishEvent(type, subjectId, payload = {}) {
+  if (!EVENTS) return;
+  try {
+    await fetch(EVENTS, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, subject_id: subjectId, payload }),
+    });
+  } catch {
+    // Best-effort: the row is already written, so a failed publish is not fatal.
+  }
+}
+
 const APP_ID  = window.__APP_ID ?? "maintenance-requests";
 const APPEND_RECORD = window.__APPEND_RECORD_URL ?? `/run/${APP_ID}/api/append-record`;
 
@@ -252,6 +268,13 @@ async function submitRequest(fields) {
   }, ...requests];
   comments[id] = [];
   notify(`New request: ${fields.title}`, `${ME?.name ?? "Someone"} submitted a ${fields.priority}-priority request.`).catch(() => {});
+  publishEvent("maintenance_request.filed", id, {
+    title: fields.title,
+    category: fields.category,
+    priority: fields.priority,
+    location: fields.location,
+    submitted_by: ME?.id ?? "system",
+  }).catch(() => {});
   return id;
 }
 
@@ -265,6 +288,13 @@ async function updateStatus(requestId, status) {
   requests = requests.map(r =>
     r.id === requestId ? { ...r, status, resolved_at: resolvedAt, updated_at: now } : r
   );
+  // Only the resolution is published. Intermediate status churn (open ->
+  // in_progress -> open) would fire rules repeatedly for no new information.
+  if (status === "resolved") {
+    publishEvent("maintenance_request.resolved", requestId, {
+      resolved_at: resolvedAt,
+    }).catch(() => {});
+  }
 }
 
 async function assignRequest(requestId, memberId) {

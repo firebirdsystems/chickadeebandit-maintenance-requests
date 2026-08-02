@@ -17,6 +17,55 @@
     "requires_approval": false
   },
   "storage": "db",
+  "automation_actions": {
+    "file_request": {
+      "title": "File a maintenance request",
+      "description": "Open a maintenance request when another app's event fires — a failed inspection, a reported problem, an overdue service.",
+      "params": {
+        "submitted_by": {
+          "type": "member",
+          "label": "Submitted by",
+          "required": true
+        },
+        "title": {
+          "type": "text",
+          "label": "What needs attention",
+          "required": true
+        },
+        "description": {
+          "type": "text",
+          "label": "Details",
+          "default": ""
+        },
+        "priority": {
+          "type": "text",
+          "label": "Priority",
+          "default": "medium",
+          "options": ["low", "medium", "high"]
+        }
+      },
+      "dedupe": {
+        "table": "requests",
+        "column": "source_event_id"
+      },
+      "steps": [
+        {
+          "op": "insert",
+          "table": "requests",
+          "values": {
+            "id": "$uuid",
+            "title": ":title",
+            "description": ":description",
+            "priority": ":priority",
+            "submitted_by": ":submitted_by",
+            "created_at": "$now",
+            "updated_at": "$now",
+            "source_event_id": "$event_id"
+          }
+        }
+      ]
+    }
+  },
   "db_plaintext_columns": ["assigned_to"],
   "row_policies": {
     "requests": {
@@ -62,6 +111,9 @@
     ]
   },
   "resource_limits": { "max_db_bytes": 52428800 },
+  "publishes": ["maintenance_request.filed", "maintenance_request.resolved"],
+  "publish_acls": {"maintenance_request.filed": {"require_role": "member"}, "maintenance_request.resolved": {"require_role": "adult"}},
+  "glance": {"source": {"kind": "sql", "query": "SELECT COUNT(*) AS n FROM app_maintenance_requests__requests WHERE status = 'open' LIMIT 1"}, "display": {"template": "badge", "count": "n", "label": "open requests", "severity": "warn"}},
   "nav": {
     "label": "Maintenance"
   },
