@@ -17,6 +17,9 @@
     "requires_approval": false
   },
   "storage": "db",
+  "preload": {
+    "requests": {"sql": "SELECT * FROM app_maintenance_requests__requests ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at DESC"}
+  },
   "automation_actions": {
     "file_request": {
       "title": "File a maintenance request",
