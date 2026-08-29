@@ -2,7 +2,7 @@
   "id": "maintenance-requests",
   "contexts": ["household", "shared_space"],
   "name": "Maintenance Requests",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Submit and track facility maintenance requests. Members report issues; leadership triages, assigns, and resolves them.",
   "entrypoint": "index.html",
   "runtime": "static",
@@ -69,7 +69,7 @@
       ]
     }
   },
-  "db_plaintext_columns": ["assigned_to"],
+  "db_plaintext_columns": ["assigned_to", "priority"],
   "row_policies": {
     "requests": {
       "kind": "owner_only",

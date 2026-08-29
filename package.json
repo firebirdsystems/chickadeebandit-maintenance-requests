@@ -1,6 +1,6 @@
 {
   "name": "chickadee-app-maintenance-requests",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Maintenance Requests app for Chickadee Bandit",
   "type": "module",
   "scripts": {
