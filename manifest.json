@@ -18,7 +18,8 @@
   },
   "storage": "db",
   "preload": {
-    "requests": {"sql": "SELECT * FROM app_maintenance_requests__requests ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at DESC"}
+    "open_queue": {"sql": "SELECT * FROM app_maintenance_requests__requests WHERE status IN ('open', 'in_progress') ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at DESC"},
+    "resolved_page": {"sql": "SELECT * FROM app_maintenance_requests__requests WHERE status = 'resolved' ORDER BY created_at DESC, id DESC LIMIT 25 OFFSET 0"}
   },
   "automation_actions": {
     "file_request": {

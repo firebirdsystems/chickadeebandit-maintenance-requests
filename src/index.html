@@ -152,6 +152,7 @@ import {
   CATEGORIES, PRIORITIES, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS, CAT_LABELS, CAT_ICONS,
   fmtDate, memberName as memberNameOf, filterRequests,
   priorityColor, statusColor, statusLabel, searchableFields,
+  pageSizeOf, pageSqlAt,
 } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -182,6 +183,25 @@ let requests  = [];
 let comments = {};
 let filter   = "open";
 let searchQ = "";       // in-app search (see logic.js searchableFields)
+let searchLoading = false;
+
+// The resolved archive's first page, spelled out as one literal for two
+// reasons, both of which bite silently:
+//
+//  1. The hub's ADMISSION validator cannot parse a parameterised LIMIT or
+//     OFFSET — `LIMIT ?`, `OFFSET ?` and `LIMIT 25 OFFSET ?` are all rejected
+//     at publish with "could not be parsed as SQL". (The runtime row-policy
+//     rewriter parses them fine, so this only shows up as a failed release.)
+//     Inline integers are the supported form.
+//  2. A preload answers only a request whose text matches the declared
+//     statement after whitespace collapse, so the first page has to exist as
+//     literal text here to line up with manifest.preload.resolved_page.
+//
+// Everything else is derived from it, so the page size lives in exactly one
+// place and later pages cannot drift from the declared one.
+const RESOLVED_FIRST_PAGE_SQL = `SELECT * FROM app_maintenance_requests__requests WHERE status = 'resolved' ORDER BY created_at DESC, id DESC LIMIT 25 OFFSET 0`;
+const PAGE_SIZE = pageSizeOf(RESOLVED_FIRST_PAGE_SQL);
+const resolvedPageSql = (offset) => pageSqlAt(RESOLVED_FIRST_PAGE_SQL, offset);
 let detailId = null;
 let modalEl  = null;
 
@@ -228,14 +248,80 @@ async function loadRequests() {
       { id: "d3", title: "Parking lot entrance light out",  description: "The pole light near the main gate is out.",           location: "Parking Lot", category: "electrical",  priority: "medium", status: "resolved",    submitted_by: "demo-3", assigned_to: "demo-2", resolved_at: demoAgo(1),   created_at: demoAgo(10), updated_at: demoAgo(1)  },
       { id: "d4", title: "Lobby door slow to close",        description: "The spring on the front door is weak — takes 10+ seconds to close.", location: "Lobby",    category: "structural",  priority: "low",    status: "open",        submitted_by: "demo-2", assigned_to: null,     resolved_at: null,          created_at: demoAgo(1),  updated_at: demoAgo(1)  },
     ];
+    // Demo mode holds every row already, so there is no archive left to page.
+    resolvedComplete = true;
     return;
   }
-  const { rows } = await db(
-    `SELECT * FROM app_maintenance_requests__requests ORDER BY
+  // Two reads, not one. The old single `SELECT *` returned every request ever
+  // filed on every launch, and the hub runs it server-side per launch per
+  // household, so an association that has used this for years paid for its
+  // whole history to render a screen that opens on the Open tab.
+  //
+  // The split follows what the screen actually needs. The OPEN QUEUE (open +
+  // in_progress) is read whole and stays whole: it is the working set, it is
+  // what the landing tab shows, and it is self-limiting because a queue drains
+  // — capping it would hide actionable work, which is the one thing this app
+  // must never do. The RESOLVED ARCHIVE only grows, so it arrives a page at a
+  // time (loadMoreResolved) and in full only when something needs all of it
+  // (loadAllResolved, on search).
+  const [active, firstPage] = await Promise.all([
+    // `status IN (...)`, not `status != 'resolved'`: SQLite cannot use an index
+    // for `!=`, so the negated form full-scans the table and the release gate
+    // rejects it. The listed values are the non-terminal half of the CHECK
+    // constraint on `status` — a migration that adds a fourth status has to add
+    // it here too, or its requests will not appear in the queue.
+    db(`SELECT * FROM app_maintenance_requests__requests WHERE status IN ('open', 'in_progress') ORDER BY
       CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
-      created_at DESC`
-  );
-  requests = rows ?? [];
+      created_at DESC`),
+    db(RESOLVED_FIRST_PAGE_SQL),
+  ]);
+  requests = active.rows ?? [];
+  mergeResolved(firstPage.rows ?? []);
+}
+
+// How many resolved rows the SERVER has handed us, which is the paging offset.
+// Deliberately not `requests.filter(...).length`: resolving a request in this
+// session adds a resolved row to the array that the server ordering already
+// counted at its own position, and paging off that number would skip a row.
+let resolvedFetched = 0;
+let resolvedComplete = false;
+
+function mergeResolved(rows) {
+  resolvedFetched += rows.length;
+  if (rows.length < PAGE_SIZE) resolvedComplete = true;
+  // Dedup by id. A request resolved during this session is already in the
+  // array, and a page boundary can re-serve a row when the archive grows
+  // underneath the offset — a repeat is harmless, a skip would not be.
+  const seen = new Set(requests.map(r => r.id));
+  requests = [...requests, ...rows.filter(r => !seen.has(r.id))];
+}
+
+async function loadMoreResolved() {
+  if (!DB || resolvedComplete) return;
+  const { rows } = await db(resolvedPageSql(resolvedFetched));
+  mergeResolved(rows ?? []);
+}
+
+// Search matches title, description and location, all of which are ENCRYPTED at
+// rest — so it cannot become a SQL LIKE and has to run client-side over loaded
+// rows. Paging the archive would therefore quietly narrow what search can find,
+// which is why typing pulls the rest of the archive in first. The cost is paid
+// on a deliberate action instead of on every launch. The promise is the guard,
+// so repeated keystrokes cannot start a second read; a failure clears it so the
+// next keystroke retries.
+let allResolvedPromise = null;
+function loadAllResolved() {
+  if (!DB || resolvedComplete) return Promise.resolve();
+  allResolvedPromise ??= db(
+    `SELECT * FROM app_maintenance_requests__requests WHERE status = 'resolved' ORDER BY created_at DESC, id DESC`
+  )
+    .then(({ rows }) => {
+      const seen = new Set(requests.map(r => r.id));
+      requests = [...requests, ...(rows ?? []).filter(r => !seen.has(r.id))];
+      resolvedComplete = true;
+    })
+    .catch((e) => { allResolvedPromise = null; throw e; });
+  return allResolvedPromise;
 }
 
 async function loadComments(requestId) {
@@ -325,6 +411,10 @@ async function deleteRequest(id) {
   // This dialog's promise is only true because of that declaration.
   if (!await hubConfirm({ message: "Delete this request?", description: "All comments will also be removed. This cannot be undone.", confirmLabel: "Delete", destructive: true })) return false;
   await db(`DELETE FROM app_maintenance_requests__requests WHERE id = ?`, [id]);
+  // Deleting an archived row shifts the server's ordering up under our paging
+  // offset, which would skip a row on the next page. Step the offset back with
+  // it. (Only rows the server actually handed us count — see resolvedFetched.)
+  if (requests.find(r => r.id === id)?.status === "resolved" && resolvedFetched > 0) resolvedFetched--;
   requests = requests.filter(r => r.id !== id);
   delete comments[id];
   return true;
@@ -579,18 +669,29 @@ function renderList() {
   const filtered = searchQ ? scoped.filter(r => searchMatch(searchQ, searchableFields(r))) : scoped;
   const FILTERS  = ["open", "in_progress", "resolved", "all"];
   const FL       = { open: "Open", in_progress: "In Progress", resolved: "Resolved", all: "All" };
-  const counts   = Object.fromEntries(
-    FILTERS.map(f => [f, f === "all" ? requests.length : requests.filter(r => r.status === f).length])
-  );
 
+  // Counts only on the tabs whose set is loaded in full. Open and In Progress
+  // are the whole open queue, so their numbers are exact — and they are the
+  // numbers that carry the signal, the "there is work waiting" badge. Resolved
+  // and All are paged, so a number there would be a count of what happens to be
+  // downloaded, which reads as a fact and is not one.
+  const counted = { open: true, in_progress: true, resolved: false, all: false };
   const tabsHtml = FILTERS.map(f => `
     <button class="item-tab ${filter === f ? "active" : ""}" onclick="setFilter('${f}')">
-      ${FL[f]} <span style="opacity:.6;font-weight:400">${counts[f]}</span>
+      ${FL[f]}${counted[f] ? ` <span style="opacity:.6;font-weight:400">${requests.filter(r => r.status === f).length}</span>` : ""}
     </button>`).join("");
+
+  // The archive is paged, so offer the rest wherever it is on screen. Search
+  // has already pulled everything, so it never needs this.
+  const moreHtml = !resolvedComplete && !searchQ && (filter === "resolved" || filter === "all")
+    ? `<button class="btn btn-ghost" id="load-more" style="width:100%;margin-top:12px">Show older resolved requests</button>`
+    : "";
 
   const cardsHtml = filtered.length === 0
     ? (searchQ
-      ? `<div class="empty">No requests match "${esc(searchQ)}".</div>`
+      ? (searchLoading
+        ? `<div class="empty">Searching…</div>`
+        : `<div class="empty">No requests match "${esc(searchQ)}".</div>`)
       : `<div class="empty">No ${filter !== "all" ? FL[filter].toLowerCase() + " " : ""}requests.</div>`)
     : filtered.map(req => {
         const assignee = req.assigned_to ? memberName(req.assigned_to) : null;
@@ -623,7 +724,8 @@ function renderList() {
     </header>
     <div class="item-tabs">${tabsHtml}</div>
     ${requests.length ? `<div class="search-row"><input id="search" class="search-input" type="search" placeholder="Search requests…" aria-label="Search requests" value="${esc(searchQ)}" /></div>` : ""}
-    <div id="request-list">${cardsHtml}</div>`;
+    <div id="request-list">${cardsHtml}</div>
+    ${moreHtml}`;
 
   // renderList redraws the whole view, so put the caret back after a keystroke.
   const searchEl = document.getElementById("search");
@@ -631,11 +733,26 @@ function renderList() {
     searchEl.focus();
     searchEl.setSelectionRange(searchQ.length, searchQ.length);
   }
+
+  const moreEl = document.getElementById("load-more");
+  if (moreEl) moreEl.onclick = async () => {
+    moreEl.disabled = true;
+    moreEl.textContent = "Loading…";
+    try { await loadMoreResolved(); renderList(); }
+    catch (e) { moreEl.disabled = false; moreEl.textContent = "Show older resolved requests"; showError(e); }
+  };
 }
 
 document.addEventListener("input", (e) => {
   if (e.target.id !== "search") return;
   searchQ = e.target.value;
+  // Pull the rest of the archive before searching it — see loadAllResolved.
+  if (searchQ && !resolvedComplete) {
+    searchLoading = true;
+    loadAllResolved()
+      .catch((err) => showError(err))
+      .finally(() => { searchLoading = false; renderList(); });
+  }
   renderList();
 });
 
@@ -648,9 +765,23 @@ function render() {
   else renderList();
 }
 
-function handleDeepLink() {
+async function handleDeepLink() {
   const id = new URLSearchParams(window.location.search).get("requestId");
-  if (id && requests.find(r => r.id === id)) openDetail(id);
+  if (!id) return;
+  // A notification or a shared link can point at a request that resolved long
+  // ago, which is now past the first archive page. Before the archive was
+  // paged, every row was in memory and this lookup always hit; now a miss has
+  // to go and get that one row, or an old link would silently do nothing.
+  // Fetched by id rather than by paging forward, and NOT counted into
+  // resolvedFetched — it is not a page, and mergeResolved's dedup drops it if
+  // paging later reaches the same row.
+  if (!requests.find(r => r.id === id) && DB) {
+    try {
+      const { rows } = await db(`SELECT * FROM app_maintenance_requests__requests WHERE id = ?`, [id]);
+      if (rows?.length) requests = [...requests, rows[0]];
+    } catch { /* fall through: a bad or unreadable id just lands on the list */ }
+  }
+  if (requests.find(r => r.id === id)) openDetail(id);
 }
 
 window.openSubmitForm = openSubmitForm;
@@ -671,7 +802,7 @@ document.getElementById("root").addEventListener("click", (e) => {
 (async () => {
   await Promise.all([loadMembers(), loadRequests()]);
   render();
-  handleDeepLink();
+  await handleDeepLink();
 })();
 </script>
 </body>
