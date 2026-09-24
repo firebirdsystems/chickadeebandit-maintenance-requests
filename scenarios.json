@@ -1,0 +1,125 @@
+{
+  "scenarios": [
+    {
+      "name": "a member sees only the requests they submitted; adults see every request",
+      "members": { "manager": "adult", "resident": "child", "neighbor": "child" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_maintenance_requests__requests (id, title, description, location, category, priority, status, submitted_by, created_at, updated_at) VALUES ('r_res', 'Leaky faucet', 'Drips all night', 'Unit 4', 'plumbing', 'high', 'open', ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'), ('r_nb', 'Broken light', 'Hallway bulb', 'Hall', 'electrical', 'low', 'open', ?, '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z')",
+          "params": ["{{resident}}", "{{neighbor}}"]
+        },
+        {
+          "action": "db",
+          "as": "resident",
+          "sql": "SELECT id FROM app_maintenance_requests__requests",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "r_res" }] }
+        },
+        {
+          "action": "db",
+          "as": "neighbor",
+          "sql": "SELECT id FROM app_maintenance_requests__requests",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "r_nb" }] }
+        },
+        {
+          "action": "db",
+          "as": "manager",
+          "sql": "SELECT id FROM app_maintenance_requests__requests ORDER BY id",
+          "expect": { "status": 200, "rowCount": 2, "rowsContain": [{ "id": "r_res" }, { "id": "r_nb" }] }
+        }
+      ]
+    },
+    {
+      "name": "a member can file a request but cannot change its status; an adult can triage and resolve it",
+      "members": { "manager": "adult", "resident": "child" },
+      "steps": [
+        {
+          "action": "db",
+          "as": "resident",
+          "sql": "INSERT INTO app_maintenance_requests__requests (id, title, description, location, category, priority, status, submitted_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)",
+          "params": ["r1", "Clogged drain", "Kitchen sink", "Unit 2", "plumbing", "medium", "{{resident}}", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "resident",
+          "sql": "UPDATE app_maintenance_requests__requests SET status = 'resolved' WHERE id = 'r1'",
+          "expect": { "status": 403 }
+        },
+        {
+          "action": "db",
+          "as": "resident",
+          "sql": "SELECT id, status FROM app_maintenance_requests__requests",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "r1", "status": "open" }] }
+        },
+        {
+          "action": "db",
+          "as": "manager",
+          "sql": "UPDATE app_maintenance_requests__requests SET status = 'resolved', resolved_at = '2026-01-03T00:00:00Z', updated_at = '2026-01-03T00:00:00Z' WHERE id = 'r1'",
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "resident",
+          "sql": "SELECT id, status FROM app_maintenance_requests__requests",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "r1", "status": "resolved" }] }
+        }
+      ]
+    },
+    {
+      "name": "open_requests returns only open and in-progress requests; all_requests includes resolved ones",
+      "members": { "manager": "adult" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_maintenance_requests__requests (id, title, description, location, category, priority, status, submitted_by, created_at, updated_at) VALUES ('r_open', 'Gate stuck', 'Wont latch', 'Front gate', 'other', 'urgent', 'open', ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'), ('r_prog', 'Paint wall', 'Scuffed', 'Lobby', 'other', 'low', 'in_progress', ?, '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z'), ('r_done', 'Replace filter', 'HVAC', 'Roof', 'hvac', 'medium', 'resolved', ?, '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z')",
+          "params": ["{{manager}}", "{{manager}}", "{{manager}}"]
+        },
+        {
+          "action": "named",
+          "as": "manager",
+          "kind": "query",
+          "name": "open_requests",
+          "expect": { "status": 200, "rowCount": 2, "rowsContain": [{ "id": "r_open" }, { "id": "r_prog" }] }
+        },
+        {
+          "action": "named",
+          "as": "manager",
+          "kind": "query",
+          "name": "all_requests",
+          "expect": { "status": 200, "rowCount": 3, "rowsContain": [{ "id": "r_done", "status": "resolved" }] }
+        }
+      ]
+    },
+    {
+      "name": "only an adult may publish maintenance_request.resolved; any member may publish maintenance_request.filed",
+      "members": { "manager": "adult", "resident": "child" },
+      "steps": [
+        {
+          "action": "publish",
+          "as": "resident",
+          "type": "maintenance_request.resolved",
+          "subject_id": "r1",
+          "payload": { "title": "Clogged drain" },
+          "expect": { "status": 403 }
+        },
+        {
+          "action": "publish",
+          "as": "resident",
+          "type": "maintenance_request.filed",
+          "subject_id": "r1",
+          "payload": { "title": "Clogged drain" },
+          "expect": { "status": 201 }
+        },
+        {
+          "action": "publish",
+          "as": "manager",
+          "type": "maintenance_request.resolved",
+          "subject_id": "r1",
+          "payload": { "title": "Clogged drain" },
+          "expect": { "status": 201 }
+        }
+      ]
+    }
+  ]
+}
