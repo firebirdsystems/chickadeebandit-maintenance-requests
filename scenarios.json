@@ -120,6 +120,58 @@
           "expect": { "status": 201 }
         }
       ]
+    },
+    {
+      "name": "in a shared space only the steward sees and triages every member's requests; a participant adult sees only their own",
+      "context": "shared_space",
+      "members": { "a": "adult", "b": "adult", "steward": "admin" },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_maintenance_requests__requests (id, title, status, submitted_by, created_at, updated_at) VALUES (?, ?, 'open', ?, ?, ?)",
+          "params": ["r-a", "Leaky tap", "{{a}}", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_maintenance_requests__requests (id, title, status, submitted_by, created_at, updated_at) VALUES (?, ?, 'open', ?, ?, ?)",
+          "params": ["r-b", "Broken gate", "{{b}}", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"]
+        },
+        {
+          "action": "db",
+          "as": "a",
+          "sql": "SELECT id FROM app_maintenance_requests__requests ORDER BY id",
+          "expect": { "status": 200, "rowCount": 1, "rowsContain": [{ "id": "r-a" }] }
+        },
+        {
+          "action": "db",
+          "as": "a",
+          "sql": "UPDATE app_maintenance_requests__requests SET status = 'resolved' WHERE id = ?",
+          "params": ["r-b"]
+        },
+        {
+          "action": "db",
+          "as": "steward",
+          "sql": "SELECT id, status FROM app_maintenance_requests__requests ORDER BY id",
+          "expect": { "status": 200, "rowCount": 2, "rowsContain": [{ "id": "r-b", "status": "open" }] }
+        },
+        {
+          "action": "db",
+          "as": "steward",
+          "sql": "UPDATE app_maintenance_requests__requests SET status = 'in_progress', assigned_to = ? WHERE id = ?",
+          "params": ["{{steward}}", "r-b"],
+          "expect": { "status": 200 }
+        },
+        {
+          "action": "db",
+          "as": "b",
+          "sql": "SELECT status, assigned_to FROM app_maintenance_requests__requests",
+          "expect": {
+            "status": 200,
+            "rowCount": 1,
+            "rowsContain": [{ "status": "in_progress", "assigned_to": "scn-steward" }]
+          }
+        }
+      ]
     }
   ]
 }
