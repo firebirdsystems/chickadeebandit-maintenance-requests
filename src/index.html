@@ -147,7 +147,7 @@
   <div id="root"><div class="loading">Loading…</div></div>
 </div>
 <script type="module">
-import { memberColor, initial, esc, isAdult, hubConfirm, createDbHelper, searchMatch } from "/hub-sdk.js";
+import { memberColor, initial, esc, isAdult, hubConfirm, createDbHelper, searchMatch, glyph } from "/hub-sdk.js";
 import {
   CATEGORIES, PRIORITIES, PRIORITY_COLORS, STATUS_LABELS, STATUS_COLORS, CAT_LABELS, CAT_ICONS,
   fmtDate, memberName as memberNameOf, filterRequests,
@@ -473,7 +473,7 @@ function closeModal() { modalEl?.remove(); modalEl = null; }
 
 function openSubmitForm() {
   openModal(`
-    <h3>🔨 Submit Maintenance Request</h3>
+    <h3>${glyph("hammer")} Submit Maintenance Request</h3>
     <div class="form-group">
       <label>Title</label>
       <input id="f-title" type="text" placeholder="Broken faucet in kitchen, Flickering hallway light…" data-autofocus />
@@ -490,7 +490,7 @@ function openSubmitForm() {
       <div class="form-group">
         <label>Category</label>
         <select id="f-cat">
-          ${CATEGORIES.map(c => `<option value="${c}">${CAT_ICONS[c]} ${CAT_LABELS[c]}</option>`).join("")}
+          ${CATEGORIES.map(c => `<option value="${c}">${CAT_LABELS[c]}</option>`).join("")}
         </select>
       </div>
       <div class="form-group">
@@ -541,7 +541,7 @@ function renderDetail() {
   if (!req) { detailId = null; renderList(); return; }
 
   const meIsAdmin = isAdult(ME);
-  const catIcon   = CAT_ICONS[req.category]  ?? "🔧";
+  const catIcon   = glyph(CAT_ICONS[req.category] ?? "wrench");
   const catLabel  = CAT_LABELS[req.category] ?? req.category;
   const priColor  = priorityColor(req.priority);
   const statColor = statusColor(req.status);
@@ -599,7 +599,7 @@ function renderDetail() {
       <span class="badge" style="background:${priColor}">${esc(req.priority.charAt(0).toUpperCase() + req.priority.slice(1))} Priority</span>
       <span class="badge" style="background:${statColor}">${statLabel}</span>
       ${assignee
-        ? `<span class="badge badge-outline">👤 ${esc(assignee)}</span>`
+        ? `<span class="badge badge-outline">${glyph("contact-card")} ${esc(assignee)}</span>`
         : `<span style="font-size:.8rem;color:var(--muted);font-style:italic">Unassigned</span>`}
     </div>
 
@@ -610,12 +610,12 @@ function renderDetail() {
 
     ${req.location ? `
       <div class="card" style="display:flex;gap:8px;align-items:center">
-        <span>📍</span><span style="font-size:.9rem">${esc(req.location)}</span>
+        <span>${glyph("location")}</span><span style="font-size:.9rem">${esc(req.location)}</span>
       </div>` : ""}
 
     ${req.resolved_at ? `
       <div class="card" style="background:#f0fdf4;border-color:#bbf7d0">
-        <span style="font-size:.88rem;color:#15803d">✓ Resolved on ${fmtDate(req.resolved_at)}</span>
+        <span style="font-size:.88rem;color:#15803d">${glyph("tick", { accent: "currentColor" })} Resolved on ${fmtDate(req.resolved_at)}</span>
       </div>` : ""}
 
     ${adminControls}
@@ -698,7 +698,7 @@ function renderList() {
         return `
           <div class="req-card" data-action="open-req" data-req-id="${esc(req.id)}">
             <div class="req-top">
-              <span class="req-icon">${CAT_ICONS[req.category] ?? "🔧"}</span>
+              <span class="req-icon">${glyph(CAT_ICONS[req.category] ?? "wrench")}</span>
               <div class="req-title-wrap">
                 <div class="req-title">${esc(req.title)}</div>
                 <div class="req-meta">${esc(CAT_LABELS[req.category] ?? req.category)} · ${fmtDate(req.created_at)}</div>
@@ -710,16 +710,16 @@ function renderList() {
             <div class="req-footer">
               <span class="badge badge-sm" style="background:${STATUS_COLORS[req.status]}">${STATUS_LABELS[req.status]}</span>
               ${assignee
-                ? `<span style="font-size:.78rem;color:var(--muted)">👤 ${esc(assignee)}</span>`
+                ? `<span style="font-size:.78rem;color:var(--muted)">${glyph("contact-card")} ${esc(assignee)}</span>`
                 : `<span style="font-size:.78rem;color:var(--muted);font-style:italic">Unassigned</span>`}
-              ${req.location ? `<span style="font-size:.78rem;color:var(--muted)">📍 ${esc(req.location)}</span>` : ""}
+              ${req.location ? `<span style="font-size:.78rem;color:var(--muted)">${glyph("location")} ${esc(req.location)}</span>` : ""}
             </div>
           </div>`;
       }).join("");
 
   document.getElementById("root").innerHTML = `
     <header>
-      <div><h1>🔨 Maintenance Requests</h1><div class="sub">Submit and track facility repair requests</div></div>
+      <div><h1>${glyph("hammer")} Maintenance Requests</h1><div class="sub">Submit and track facility repair requests</div></div>
       ${ME ? `<button class="btn btn-icon" onclick="openSubmitForm()" title="Submit Request">＋</button>` : ""}
     </header>
     <div class="item-tabs">${tabsHtml}</div>

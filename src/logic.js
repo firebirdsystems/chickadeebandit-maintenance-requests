@@ -8,7 +8,7 @@ export const PRIORITY_COLORS = { urgent: "#dc2626", high: "#ea580c", medium: "#c
 export const STATUS_LABELS   = { open: "Open", in_progress: "In Progress", resolved: "Resolved" };
 export const STATUS_COLORS   = { open: "#2563eb", in_progress: "#7c3aed", resolved: "#16a34a" };
 export const CAT_LABELS = { plumbing: "Plumbing", electrical: "Electrical", hvac: "HVAC", structural: "Structural", appliance: "Appliance", grounds: "Grounds", other: "Other" };
-export const CAT_ICONS  = { plumbing: "🪠", electrical: "⚡", hvac: "🌡️", structural: "🏗️", appliance: "🔌", grounds: "🌿", other: "🔧" };
+export const CAT_ICONS  = { plumbing: "droplet", electrical: "lightbulb", hvac: "thermometer", structural: "building", appliance: "plug", grounds: "sprout", other: "wrench" };
 
 export function fmtDate(iso) {
   if (!iso) return "";
