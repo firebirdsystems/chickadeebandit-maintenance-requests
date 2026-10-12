@@ -386,7 +386,7 @@ async function updateStatus(requestId, status) {
     `UPDATE app_maintenance_requests__requests SET status = ?, resolved_at = ?, updated_at = ? WHERE id = ?`,
     [status, resolvedAt, now, requestId]
   );
-  if (changed === 0) throw new Error("This request could not be updated.");
+  if (changed === 0) throw userError("This request could not be updated.");
   requests = requests.map(r =>
     r.id === requestId ? { ...r, status, resolved_at: resolvedAt, updated_at: now } : r
   );
@@ -405,7 +405,7 @@ async function assignRequest(requestId, memberId) {
     `UPDATE app_maintenance_requests__requests SET assigned_to = ?, updated_at = ? WHERE id = ?`,
     [memberId || null, now, requestId]
   );
-  if (changed === 0) throw new Error("This request could not be assigned.");
+  if (changed === 0) throw userError("This request could not be assigned.");
   requests = requests.map(r =>
     r.id === requestId ? { ...r, assigned_to: memberId || null, updated_at: now } : r
   );
@@ -428,7 +428,7 @@ async function deleteRequest(id) {
   // This dialog's promise is only true because of that declaration.
   if (!await hubConfirm({ message: "Delete this request?", description: "All comments will also be removed. This cannot be undone.", confirmLabel: "Delete", destructive: true })) return false;
   const { changed } = await db(`DELETE FROM app_maintenance_requests__requests WHERE id = ?`, [id]);
-  if (changed === 0) throw new Error("This request could not be deleted.");
+  if (changed === 0) throw userError("This request could not be deleted.");
   // Deleting an archived row shifts the server's ordering up under our paging
   // offset, which would skip a row on the next page. Step the offset back with
   // it. (Only rows the server actually handed us count — see resolvedFetched.)
@@ -445,8 +445,12 @@ async function deleteRequest(id) {
  * success. Now that db() throws, every handler routes here.
  */
 let errorTimer = null;
-function showError(err) {
-  const message = err?.message || "Something went wrong. Please try again.";
+// Wording this app wrote for the reader is marked where it is thrown; any
+// other failure is said in the caller's fixed line, never the hub's text.
+function userError(msg) { return Object.assign(new Error(msg), { forUser: true }); }
+function showError(err, line = "Couldn’t save — try again.") {
+  console.error(err);
+  const message = err?.forUser ? err.message : line;
   let el = document.getElementById("app-error");
   if (!el) {
     el = document.createElement("div");
@@ -542,7 +546,7 @@ window.submitForm = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Submit Request"; }
-    showError(e);
+    showError(e, "Couldn’t submit the request — try again.");
   }
 };
 
@@ -551,7 +555,7 @@ window.submitForm = async function() {
 async function openDetail(id) {
   detailId = id;
   // The request still opens when its comments cannot be read.
-  if (!comments[id]) { try { await loadComments(id); } catch (e) { showError(e); } }
+  if (!comments[id]) { try { await loadComments(id); } catch (e) { showError(e, "Couldn’t load the comments."); } }
   render();
 }
 
@@ -660,10 +664,10 @@ function renderDetail() {
 
 window.backToList  = () => { detailId = null; render(); };
 window.openDetail  = openDetail;
-window.doDelete    = async id => { try { if (await deleteRequest(id)) { detailId = null; render(); } } catch (e) { showError(e); } };
-window.setStatus   = async s  => { try { await updateStatus(detailId, s); render(); } catch (e) { showError(e); } };
+window.doDelete    = async id => { try { if (await deleteRequest(id)) { detailId = null; render(); } } catch (e) { showError(e, "Couldn’t delete the request — try again."); } };
+window.setStatus   = async s  => { try { await updateStatus(detailId, s); render(); } catch (e) { showError(e, "Couldn’t update the status — try again."); } };
 // A refused assignment redraws too, so the picker goes back to who has it.
-window.setAssignee = async id => { try { await assignRequest(detailId, id); } catch (e) { showError(e); } render(); };
+window.setAssignee = async id => { try { await assignRequest(detailId, id); } catch (e) { showError(e, "Couldn’t assign the request — try again."); } render(); };
 
 window.postComment = async function() {
   const ta   = document.getElementById("comment-input");
@@ -676,7 +680,7 @@ window.postComment = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Post"; }
-    showError(e);
+    showError(e, "Couldn’t post the comment — try again.");
   }
 };
 
@@ -764,7 +768,7 @@ function renderList() {
     moreEl.disabled = true;
     moreEl.textContent = "Loading…";
     try { await loadMoreResolved(); renderList(); }
-    catch (e) { moreEl.disabled = false; moreEl.textContent = "Show older resolved requests"; showError(e); }
+    catch (e) { moreEl.disabled = false; moreEl.textContent = "Show older resolved requests"; showError(e, "Couldn’t load older requests."); }
   };
 }
 
@@ -775,7 +779,7 @@ document.addEventListener("input", (e) => {
   if (searchQ && !resolvedComplete) {
     searchLoading = true;
     loadAllResolved()
-      .catch((err) => showError(err))
+      .catch((err) => showError(err, "Couldn’t load older requests."))
       .finally(() => { searchLoading = false; renderList(); });
   }
   renderList();
