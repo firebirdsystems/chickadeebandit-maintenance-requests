@@ -1,0 +1,158 @@
+{
+  "scenarios": [
+    {
+      "name": "in a shared space a participant reads the steward's comment on their own request and is offered no triage controls; the steward is",
+      "context": "shared_space",
+      "members": {
+        "steward": "admin",
+        "pat": "adult"
+      },
+      "steps": [
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_maintenance_requests__requests (id, title, category, priority, status, submitted_by, created_at, updated_at) VALUES ('r-pat', ?, 'plumbing', 'high', 'open', ?, ?, ?)",
+          "params": [
+            "Leaking tap in the hall",
+            "{{pat}}",
+            "2026-01-05T10:00:00Z",
+            "2026-01-05T10:00:00Z"
+          ]
+        },
+        {
+          "action": "seedRaw",
+          "sql": "INSERT INTO app_maintenance_requests__comments (id, request_id, author_id, body, created_at) VALUES ('c-steward', 'r-pat', ?, ?, ?)",
+          "params": [
+            "{{steward}}",
+            "Plumber is booked for Tuesday",
+            "2026-01-06T10:00:00Z"
+          ]
+        },
+        {
+          "action": "open",
+          "as": "pat"
+        },
+        {
+          "action": "expectVisible",
+          "as": "pat",
+          "selector": "[data-testid=\"request-card\"][data-req-id=\"r-pat\"]"
+        },
+        {
+          "action": "expectVisible",
+          "as": "pat",
+          "selector": "[data-testid=\"scope-note\"]"
+        },
+        {
+          "action": "click",
+          "as": "pat",
+          "selector": "[data-testid=\"request-card\"][data-req-id=\"r-pat\"]"
+        },
+        {
+          "action": "expectText",
+          "as": "pat",
+          "selector": "[data-testid=\"detail-title\"]",
+          "text": "Leaking tap in the hall"
+        },
+        {
+          "action": "expectText",
+          "as": "pat",
+          "selector": "[data-testid=\"comment-row\"][data-comment-id=\"c-steward\"] [data-testid=\"comment-text\"]",
+          "text": "Plumber is booked for Tuesday"
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"admin-controls\"]",
+          "count": 0
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"status-button\"]",
+          "count": 0
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"field-assignee\"]",
+          "count": 0
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"delete-request\"]",
+          "count": 0
+        },
+        {
+          "action": "fill",
+          "as": "pat",
+          "selector": "[data-testid=\"field-comment\"]",
+          "value": "Thanks, I will be in"
+        },
+        {
+          "action": "click",
+          "as": "pat",
+          "selector": "[data-testid=\"post-comment\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "pat",
+          "selector": "[data-testid=\"comment-row\"]",
+          "count": 2
+        },
+        {
+          "action": "open",
+          "as": "steward"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"request-card\"][data-req-id=\"r-pat\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "steward",
+          "selector": "[data-testid=\"scope-note\"]",
+          "count": 0
+        },
+        {
+          "action": "click",
+          "as": "steward",
+          "selector": "[data-testid=\"request-card\"][data-req-id=\"r-pat\"]"
+        },
+        {
+          "action": "expectText",
+          "as": "steward",
+          "selector": "[data-testid=\"detail-title\"]",
+          "text": "Leaking tap in the hall"
+        },
+        {
+          "action": "expectCount",
+          "as": "steward",
+          "selector": "[data-testid=\"comment-row\"]",
+          "count": 2
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"admin-controls\"]"
+        },
+        {
+          "action": "expectCount",
+          "as": "steward",
+          "selector": "[data-testid=\"status-button\"]",
+          "count": 3
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"field-assignee\"]"
+        },
+        {
+          "action": "expectVisible",
+          "as": "steward",
+          "selector": "[data-testid=\"delete-request\"]"
+        }
+      ]
+    }
+  ]
+}

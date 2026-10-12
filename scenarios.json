@@ -172,6 +172,31 @@
           }
         }
       ]
+    },
+    {
+      "name": "whoever filed a request reads every comment on it, including an adult's reply; another member reads none",
+      "members": {"parent": "adult", "kid": "child", "sibling": "child"},
+      "steps": [
+        {"action": "seedRaw", "sql": "INSERT INTO app_maintenance_requests__requests (id, title, status, submitted_by, created_at, updated_at) VALUES (?, ?, 'open', ?, ?, ?)", "params": ["r-kid", "Squeaky door", "{{kid}}", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"]},
+        {"action": "seedRaw", "sql": "INSERT INTO app_maintenance_requests__comments (id, request_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)", "params": ["c-kid", "r-kid", "{{kid}}", "It is the back door", "2026-01-01T00:00:00Z"]},
+        {"action": "seedRaw", "sql": "INSERT INTO app_maintenance_requests__comments (id, request_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)", "params": ["c-parent", "r-kid", "{{parent}}", "I will oil it Saturday", "2026-01-01T00:00:00Z"]},
+        {"action": "db", "as": "kid", "sql": "SELECT id FROM app_maintenance_requests__comments WHERE request_id = ? ORDER BY id", "params": ["r-kid"], "expect": {"status": 200, "rowCount": 2, "rowsContain": [{"id": "c-kid"}, {"id": "c-parent"}]}},
+        {"action": "db", "as": "parent", "sql": "SELECT id FROM app_maintenance_requests__comments WHERE request_id = ? ORDER BY id", "params": ["r-kid"], "expect": {"status": 200, "rowCount": 2}},
+        {"action": "db", "as": "sibling", "sql": "SELECT id FROM app_maintenance_requests__comments WHERE request_id = ? ORDER BY id", "params": ["r-kid"], "expect": {"status": 200, "rowCount": 0}},
+        {"action": "db", "as": "kid", "sql": "DELETE FROM app_maintenance_requests__comments WHERE id = ?", "params": ["c-parent"], "expect": {"status": 403}}
+      ]
+    },
+    {
+      "name": "in a shared space a participant reads the steward's reply on their own request, and nothing on anyone else's",
+      "context": "shared_space",
+      "members": {"a": "adult", "b": "adult", "steward": "admin"},
+      "steps": [
+        {"action": "seedRaw", "sql": "INSERT INTO app_maintenance_requests__requests (id, title, status, submitted_by, created_at, updated_at) VALUES (?, ?, 'open', ?, ?, ?)", "params": ["r-a", "Leaky tap", "{{a}}", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"]},
+        {"action": "seedRaw", "sql": "INSERT INTO app_maintenance_requests__comments (id, request_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)", "params": ["c-steward", "r-a", "{{steward}}", "Plumber booked for Tuesday", "2026-01-01T00:00:00Z"]},
+        {"action": "db", "as": "a", "sql": "SELECT id FROM app_maintenance_requests__comments WHERE request_id = ? ORDER BY id", "params": ["r-a"], "expect": {"status": 200, "rowCount": 1, "rowsContain": [{"id": "c-steward"}]}},
+        {"action": "db", "as": "b", "sql": "SELECT id FROM app_maintenance_requests__comments WHERE request_id = ? ORDER BY id", "params": ["r-a"], "expect": {"status": 200, "rowCount": 0}},
+        {"action": "db", "as": "steward", "sql": "SELECT id FROM app_maintenance_requests__comments WHERE request_id = ? ORDER BY id", "params": ["r-a"], "expect": {"status": 200, "rowCount": 1}}
+      ]
     }
   ]
 }

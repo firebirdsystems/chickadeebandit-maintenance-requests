@@ -79,10 +79,10 @@
       "member_can_update": false
     },
     "comments": {
-      "kind": "owner_only",
-      "member_column": "author_id",
-      "adults_bypass": true,
-      "member_can_update": false,
+      "kind": "inherit_visibility",
+      "parent_table": "requests",
+      "fk_column": "request_id",
+      "writer_column": "author_id",
       "endpoint_writes_only": true
     }
   },

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   CATEGORIES, PRIORITIES, STATUS_LABELS,
   fmtDate, memberName, filterRequests, priorityColor, statusColor, statusLabel, searchableFields,
-  sortRequests, pageSizeOf, pageSqlAt,
+  sortRequests, pageSizeOf, pageSqlAt, triagesRequests, assignableMembers,
 } from "../src/logic.js";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
@@ -132,5 +132,50 @@ describe("sortRequests", () => {
     const rows = [mk("x", "mystery", "2026-08-30"), mk("y", "low", "2026-08-30")];
     expect(sortRequests(rows).map(r => r.id)).toEqual(["y", "x"]);
     expect(rows.map(r => r.id)).toEqual(["x", "y"]);
+  });
+});
+
+describe("triagesRequests", () => {
+  const adult = { id: "a", role: "adult" };
+  const child = { id: "c", role: "child" };
+  const space = { tenantKind: "shared_space", spaceKind: "general" };
+
+  it("is any adult in a household, and the default tenant is a household", () => {
+    expect(triagesRequests(adult)).toBe(true);
+    expect(triagesRequests(adult, { tenantKind: "household", isAdmin: false })).toBe(true);
+  });
+  it("is never a child or a signed-out visitor at home", () => {
+    expect(triagesRequests(child)).toBe(false);
+    expect(triagesRequests(null)).toBe(false);
+  });
+  it("is not an adult who takes part in a shared space", () => {
+    expect(triagesRequests(adult, { ...space, isAdmin: false })).toBe(false);
+  });
+  it("is the steward of a shared space, of any kind", () => {
+    expect(triagesRequests(adult, { ...space, isAdmin: true })).toBe(true);
+    expect(triagesRequests(adult, { tenantKind: "shared_space", spaceKind: "coparenting", isAdmin: true })).toBe(true);
+    expect(triagesRequests(adult, { tenantKind: "shared_space", spaceKind: "roster", isAdmin: true })).toBe(true);
+  });
+});
+
+describe("assignableMembers", () => {
+  const members = [
+    { id: "s", role: "adult", isAdmin: true },
+    { id: "a", role: "adult", isAdmin: false },
+    { id: "b", role: "adult" },
+    { id: "c", role: "child" },
+  ];
+  const ids = list => list.map(m => m.id);
+
+  it("offers every adult in a household", () => {
+    expect(ids(assignableMembers(members))).toEqual(["s", "a", "b"]);
+    expect(ids(assignableMembers(members, { tenantKind: "household" }))).toEqual(["s", "a", "b"]);
+  });
+  it("offers only stewards in a shared space", () => {
+    expect(ids(assignableMembers(members, { tenantKind: "shared_space" }))).toEqual(["s"]);
+  });
+  it("keeps the current assignee selectable", () => {
+    expect(ids(assignableMembers(members, { tenantKind: "shared_space" }, "a"))).toEqual(["s", "a"]);
+    expect(ids(assignableMembers(members, { tenantKind: "household" }, "c"))).toEqual(["s", "a", "b", "c"]);
   });
 });

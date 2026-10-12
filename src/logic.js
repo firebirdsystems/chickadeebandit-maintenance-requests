@@ -90,3 +90,33 @@ export function statusLabel(status) {
 export function searchableFields(item) {
   return [item.title, item.description, item.location, item.category, item.priority];
 }
+
+// The hub's own test for an adult member (hub-sdk `isAdult`), repeated here so
+// the role rules below can be unit-tested without the browser-only SDK.
+function isAdultMember(member) {
+  return !!member && (member.role === "adult" || member.role === "admin");
+}
+
+/**
+ * Whether a member triages requests: reads everyone's, sets status and
+ * assignee, deletes. Mirrors the hub's rule for the requests and comments
+ * tables (owner_only with adults_bypass and member_can_update: false): any
+ * adult in a household, and only the steward in a shared space. Anyone else
+ * reads the requests they submitted and is refused every update, so a triage
+ * queue offered to them would hold their own rows and buttons that fail.
+ */
+export function triagesRequests(member, { tenantKind = "household", isAdmin = false } = {}) {
+  return tenantKind === "household" ? isAdultMember(member) : isAdmin === true;
+}
+
+/**
+ * Who a request may be assigned to: the people who can read it. In a
+ * household that is every adult; in a shared space only a steward reads
+ * someone else's request (`isAdmin` on family.members). `currentId` keeps an
+ * existing assignee selectable so the picker never misreports who has it.
+ */
+export function assignableMembers(members, { tenantKind = "household" } = {}, currentId = null) {
+  return members.filter(m =>
+    (tenantKind === "household" ? isAdultMember(m) : m.isAdmin === true) || (!!currentId && m.id === currentId)
+  );
+}
