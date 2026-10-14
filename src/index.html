@@ -156,6 +156,7 @@ import {
   fmtDate, memberName as memberNameOf, filterRequests,
   priorityColor, statusColor, statusLabel, searchableFields,
   pageSizeOf, pageSqlAt, triagesRequests, assignableMembers,
+  outcomeUnknown, storedDiffers, SAVED_AS_FIRST, failureLine,
 } from "./logic.js";
 
 const CONTEXT = window.__CONTEXT_URL ?? "";
@@ -228,7 +229,7 @@ async function appendRecord(name, data) {
     body: JSON.stringify(data),
   });
   const json = await res.json().catch(() => null);
-  if (!res.ok || !json || typeof json !== "object" || json.error) throw new Error(json?.error || "Append failed");
+  if (!res.ok || !json || typeof json !== "object" || json.error) throw Object.assign(new Error(json?.error || "Append failed"), { status: res.status, code: typeof json?.code === "string" ? json.code : undefined });
   return json;
 }
 
@@ -354,19 +355,49 @@ function memberName(id) { return memberNameOf(memberMap, id); }
 
 // ─── DB ops ─────────────────────────────────────────────────────────────────
 
-async function submitRequest(fields) {
-  const id  = crypto.randomUUID();
-  const now = new Date().toISOString();
-  await db(
-    `INSERT INTO app_maintenance_requests__requests (id, title, description, location, category, priority, status, submitted_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
-    [id, fields.title, fields.description, fields.location, fields.category, fields.priority, ME?.id ?? "system", now, now]
-  );
+async function submitRequest(fields, pinHost = null) {
+  // The id is the form's, minted on its first Submit and sent on every retry:
+  // a try whose answer was lost may have stored the request, and a second
+  // press must find it rather than file (and notify the adults) twice.
+  const id  = pinHost ? (pinHost.dataset.rowId ||= crypto.randomUUID()) : crypto.randomUUID();
+  let now = new Date().toISOString();
+  let note = "";
+  try {
+    await db(
+      `INSERT INTO app_maintenance_requests__requests (id, title, description, location, category, priority, status, submitted_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
+      [id, fields.title, fields.description, fields.location, fields.category, fields.priority, ME?.id ?? "system", now, now]
+    );
+  } catch (e) {
+    // Unknown outcome: read the request back by the pinned id. Found means an
+    // earlier try landed and its success path never ran, so it runs now, once.
+    // Not found, or the read failed: the submit fails, the id stays pinned.
+    if (!outcomeUnknown(e)) throw e;
+    let stored = null;
+    try {
+      stored = (await db(`SELECT title, description, location, category, priority, created_at FROM app_maintenance_requests__requests WHERE id = ?`, [id])).rows?.[0] ?? null;
+    } catch (readErr) {
+      // The id is ours: with the read-back failed, a UNIQUE answer may be this
+      // form's own first try, so nothing is known — "try again", not "already exists".
+      console.error(readErr);
+      throw new Error("create outcome unknown", { cause: e });
+    }
+    if (!stored) throw e;
+    console.error(e);
+    // Edited since that first try: what was stored is kept, and said so.
+    if (storedDiffers(stored, fields)) note = SAVED_AS_FIRST;
+    fields = {
+      title: stored.title, description: stored.description ?? "", location: stored.location ?? "",
+      category: stored.category, priority: stored.priority,
+    };
+    now = stored.created_at || now;
+  }
+  if (pinHost) delete pinHost.dataset.rowId;
   requests = [{
     id, title: fields.title, description: fields.description, location: fields.location,
     category: fields.category, priority: fields.priority, status: "open",
     submitted_by: ME?.id ?? "system", assigned_to: null, resolved_at: null, created_at: now, updated_at: now,
-  }, ...requests];
+  }, ...requests.filter(r => r.id !== id)];
   comments[id] = [];
   notify(`New request: ${fields.title}`, `${ME?.name ?? "Someone"} submitted a ${fields.priority}-priority request.`).catch(() => {});
   publishEvent("maintenance_request.filed", id, {
@@ -376,7 +407,21 @@ async function submitRequest(fields) {
     location: fields.location,
     submitted_by: ME?.id ?? "system",
   }).catch(() => {});
-  return id;
+  return { id, note };
+}
+
+const STATUS_WORDS = { action: "update the status", thing: "request" };
+const ASSIGN_WORDS = { action: "assign the request", thing: "request" };
+const DELETE_WORDS = { action: "delete the request", thing: "request" };
+
+// A write that changed nothing: re-read the request and word the line by what
+// is there (a plain `WHERE id = ?`, so a row still present was refused).
+async function unchangedRequest(requestId, words) {
+  let found = null;
+  try {
+    found = ((await db(`SELECT id FROM app_maintenance_requests__requests WHERE id = ?`, [requestId])).rows?.length ?? 0) > 0;
+  } catch (readErr) { console.error(readErr); }
+  return userError(failureLine(null, { ...words, found }));
 }
 
 async function updateStatus(requestId, status) {
@@ -386,7 +431,7 @@ async function updateStatus(requestId, status) {
     `UPDATE app_maintenance_requests__requests SET status = ?, resolved_at = ?, updated_at = ? WHERE id = ?`,
     [status, resolvedAt, now, requestId]
   );
-  if (changed === 0) throw userError("This request could not be updated.");
+  if (changed === 0) throw await unchangedRequest(requestId, STATUS_WORDS);
   requests = requests.map(r =>
     r.id === requestId ? { ...r, status, resolved_at: resolvedAt, updated_at: now } : r
   );
@@ -405,7 +450,7 @@ async function assignRequest(requestId, memberId) {
     `UPDATE app_maintenance_requests__requests SET assigned_to = ?, updated_at = ? WHERE id = ?`,
     [memberId || null, now, requestId]
   );
-  if (changed === 0) throw userError("This request could not be assigned.");
+  if (changed === 0) throw await unchangedRequest(requestId, ASSIGN_WORDS);
   requests = requests.map(r =>
     r.id === requestId ? { ...r, assigned_to: memberId || null, updated_at: now } : r
   );
@@ -428,7 +473,7 @@ async function deleteRequest(id) {
   // This dialog's promise is only true because of that declaration.
   if (!await hubConfirm({ message: "Delete this request?", description: "All comments will also be removed. This cannot be undone.", confirmLabel: "Delete", destructive: true })) return false;
   const { changed } = await db(`DELETE FROM app_maintenance_requests__requests WHERE id = ?`, [id]);
-  if (changed === 0) throw userError("This request could not be deleted.");
+  if (changed === 0) throw await unchangedRequest(id, DELETE_WORDS);
   // Deleting an archived row shifts the server's ordering up under our paging
   // offset, which would skip a row on the next page. Step the offset back with
   // it. (Only rows the server actually handed us count — see resolvedFetched.)
@@ -531,22 +576,24 @@ function openSubmitForm() {
 window.submitForm = async function() {
   const title = document.getElementById("f-title").value.trim();
   if (!title) { document.getElementById("f-title").focus(); return; }
-  const btn = modalEl?.querySelector(".modal-actions .btn-primary");
+  const host = modalEl;
+  const btn = host?.querySelector(".modal-actions .btn-primary");
   if (btn) { btn.disabled = true; btn.textContent = "Submitting…"; }
   try {
-    const id = await submitRequest({
+    const { id, note } = await submitRequest({
       title,
       description: document.getElementById("f-desc").value.trim(),
       location:    document.getElementById("f-loc").value.trim(),
       category:    document.getElementById("f-cat").value,
       priority:    document.getElementById("f-pri").value,
-    });
-    closeModal();
+    }, host);
+    if (modalEl === host) closeModal();
     detailId = id;
     render();
+    if (note) showError(userError(note));
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Submit Request"; }
-    showError(e, "Couldn’t submit the request — try again.");
+    showError(e, failureLine(e, { action: "submit the request", thing: "request" }));
   }
 };
 
@@ -664,10 +711,10 @@ function renderDetail() {
 
 window.backToList  = () => { detailId = null; render(); };
 window.openDetail  = openDetail;
-window.doDelete    = async id => { try { if (await deleteRequest(id)) { detailId = null; render(); } } catch (e) { showError(e, "Couldn’t delete the request — try again."); } };
-window.setStatus   = async s  => { try { await updateStatus(detailId, s); render(); } catch (e) { showError(e, "Couldn’t update the status — try again."); } };
+window.doDelete    = async id => { try { if (await deleteRequest(id)) { detailId = null; render(); } } catch (e) { showError(e, failureLine(e, DELETE_WORDS)); } };
+window.setStatus   = async s  => { try { await updateStatus(detailId, s); render(); } catch (e) { showError(e, failureLine(e, STATUS_WORDS)); } };
 // A refused assignment redraws too, so the picker goes back to who has it.
-window.setAssignee = async id => { try { await assignRequest(detailId, id); } catch (e) { showError(e, "Couldn’t assign the request — try again."); } render(); };
+window.setAssignee = async id => { try { await assignRequest(detailId, id); } catch (e) { showError(e, failureLine(e, ASSIGN_WORDS)); } render(); };
 
 window.postComment = async function() {
   const ta   = document.getElementById("comment-input");
@@ -680,7 +727,7 @@ window.postComment = async function() {
     render();
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = "Post"; }
-    showError(e, "Couldn’t post the comment — try again.");
+    showError(e, failureLine(e, { action: "post the comment", thing: "comment" }));
   }
 };
 
